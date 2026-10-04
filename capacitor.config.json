@@ -1,0 +1,11 @@
+{
+  "appId": "com.kayan.passenger.demo",
+  "appName": "KAYAN Demo",
+  "webDir": "dist",
+  "android": {
+    "allowMixedContent": false
+  },
+  "server": {
+    "androidScheme": "https"
+  }
+}
