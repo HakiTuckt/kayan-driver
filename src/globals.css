@@ -28,6 +28,38 @@
     --forest: #062d24;
     --copper: #d87932;
     --cream: #fff3df;
+    --map-base: #d9e5cf;
+    --map-grid: #b7cbb1;
+    --map-block: #cedec3;
+    --map-park: #b4cdaa;
+    --map-street: #acbba2;
+    --map-road: #faf5e5;
+    --map-label: #3d5c43;
+    --map-road-label: #4b6250;
+  }
+  .dark {
+    --background: 162 37% 10%;
+    --foreground: 42 65% 93%;
+    --card: 160 29% 15%;
+    --card-foreground: 42 65% 93%;
+    --popover: 160 29% 15%;
+    --popover-foreground: 42 65% 93%;
+    --secondary: 157 23% 22%;
+    --secondary-foreground: 42 65% 93%;
+    --muted: 157 23% 20%;
+    --muted-foreground: 145 17% 73%;
+    --accent: 157 23% 24%;
+    --accent-foreground: 42 65% 93%;
+    --border: 156 18% 30%;
+    --input: 156 18% 30%;
+    --map-base: #305342;
+    --map-grid: #436551;
+    --map-block: #365a45;
+    --map-park: #42674d;
+    --map-street: #638069;
+    --map-road: #bac4a0;
+    --map-label: #e0e8d2;
+    --map-road-label: #eff1df;
   }
   * { @apply border-border; }
   body { @apply bg-background text-foreground; font-family: 'DM Sans', sans-serif; }
