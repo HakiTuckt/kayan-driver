@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ArrowLeft, ArrowRight, Car, Check, ChevronRight, Clock3, CreditCard, Home, MapPin, Navigation, Search, ShieldCheck, Sparkles, Star, Users, Wallet } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,13 +15,14 @@ export type Destination = typeof destinations[number];
 export type Ride = { id: string; destination: Destination; pickup: string; category: string; price: number; payment: string; date: string; status: 'Completed' | 'Cancelled' };
 export type ActiveRide = Omit<Ride, 'date' | 'status'>;
 
-export default function BookingPanel({ destination, onDestination, onBook }: { destination: Destination | null; onDestination: (d: Destination | null) => void; onBook: (ride: ActiveRide) => void }) {
-  const [query, setQuery] = useState('');
+export default function BookingPanel({ destination, onDestination, onBook, savedHome, onSaveHome, defaultPayment, onSavedLocations, onSavedPayments }: { destination: Destination | null; onDestination: (d: Destination | null) => void; onBook: (ride: ActiveRide) => void; savedHome: Destination | null; onSaveHome: (d: Destination) => void; defaultPayment: string; onSavedLocations: () => void; onSavedPayments: () => void }) {
+  const [query, setQuery] = useState(destination?.name || '');
   const [pickup, setPickup] = useState('Rhodes Park, Lusaka');
   const [category, setCategory] = useState('KAYAN Classic');
-  const [payment, setPayment] = useState('Cash');
+  const [payment, setPayment] = useState(defaultPayment);
   const [searching, setSearching] = useState(false);
-  const [saved, setSaved] = useState<Destination | null>(null);
+  useEffect(() => setPayment(defaultPayment), [defaultPayment]);
+  useEffect(() => { if (destination) { setQuery(destination.name); setSearching(false); } }, [destination]);
   const results = destinations.filter(d => `${d.name} ${d.address}`.toLowerCase().includes(query.toLowerCase()));
   const choose = (d: Destination) => { onDestination(d); setQuery(d.name); setSearching(false); };
   const price = destination ? destination.price + (category === 'KAYAN Comfort' ? 30 : 0) : 0;
@@ -35,17 +36,17 @@ export default function BookingPanel({ destination, onDestination, onBook }: { d
       </div>
       <p className="mt-2 text-[10px] text-muted-foreground">Demo pickup is entered manually · optional device location is shown separately on the map</p>
       {!destination && <>
-        <div className="my-5 grid grid-cols-2 gap-2"><button onClick={() => { if (saved) choose(saved); else { setSearching(true); toast.info('Choose a destination, then use “Save as home”.'); } }} className="flex items-center gap-2.5 rounded-xl border border-border p-3 text-left hover:bg-secondary"><Home size={17} className="text-primary"/><div><p className="text-xs font-bold">Home</p><p className="mt-0.5 max-w-[100px] truncate text-[10px] text-muted-foreground">{saved?.name || 'Add a place'}</p></div></button><button onClick={() => { setQuery(''); setSearching(true); }} className="flex items-center gap-2.5 rounded-xl border border-border p-3 text-left hover:bg-secondary"><MapPin size={17} className="text-primary"/><div><p className="text-xs font-bold">Explore Lusaka</p><p className="mt-0.5 text-[10px] text-muted-foreground">Popular places</p></div></button></div>
+        <div className="my-5 grid grid-cols-2 gap-2"><button onClick={() => { if (savedHome) choose(savedHome); else onSavedLocations(); }} className="flex items-center gap-2.5 rounded-xl border border-border p-3 text-left hover:bg-secondary"><Home size={17} className="text-primary"/><div><p className="text-xs font-bold">Home</p><p className="mt-0.5 max-w-[100px] truncate text-[10px] text-muted-foreground">{savedHome?.name || 'Add a place'}</p></div></button><button onClick={() => { setQuery(''); setSearching(true); }} className="flex items-center gap-2.5 rounded-xl border border-border p-3 text-left hover:bg-secondary"><MapPin size={17} className="text-primary"/><div><p className="text-xs font-bold">Explore Lusaka</p><p className="mt-0.5 text-[10px] text-muted-foreground">Popular places</p></div></button></div>
         <div className="mb-3 flex items-center justify-between"><h3 className="text-xs font-bold">{searching ? 'Destination results' : 'Popular destinations'}</h3><span className="text-[10px] text-muted-foreground">Lusaka</span></div>
         <div className="space-y-1">{results.map(d => <button key={d.name} onClick={() => choose(d)} className="flex w-full items-center gap-3 rounded-xl px-1 py-3 text-left hover:bg-secondary"><span className="rounded-full bg-secondary p-2.5"><MapPin size={16}/></span><div className="flex-1"><p className="text-xs font-semibold">{d.name}</p><p className="mt-1 text-[10px] text-muted-foreground">{d.address}</p></div><ChevronRight size={15} className="text-muted-foreground"/></button>)}{!results.length && <p className="rounded-xl bg-secondary p-4 text-xs text-muted-foreground">No demo destinations found. Try “mall” or “airport”. Live address search is not connected.</p>}</div>
         <div className="mt-6 flex items-start gap-3 rounded-xl bg-accent p-4"><Sparkles size={18} className="shrink-0 text-primary"/><div><p className="text-xs font-bold">Not just a ride. A better ride.</p><p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">A service designed around clean cars, courteous drivers, and you.</p></div></div>
       </>}
       {destination && <div className="enter">
-        <div className="mt-4 flex items-center justify-between"><p className="flex items-center gap-1.5 text-xs text-muted-foreground"><Clock3 size={14}/> {destination.time} min · {destination.distance} km</p><button onClick={() => { setSaved(destination); toast.success('Home saved for this session.'); }} className="text-[10px] font-bold text-primary">Save as home</button></div>
+        <div className="mt-4 flex items-center justify-between"><p className="flex items-center gap-1.5 text-xs text-muted-foreground"><Clock3 size={14}/> {destination.time} min · {destination.distance} km</p><button onClick={() => { onSaveHome(destination); toast.success('Home saved for this session.'); }} className="text-[10px] font-bold text-primary">Save as home</button></div>
         <h3 className="mb-3 mt-6 text-sm font-bold">Choose your ride</h3>
         {['KAYAN Classic', 'KAYAN Comfort'].map((name, i) => <button key={name} onClick={() => setCategory(name)} className={`mb-2 flex w-full items-center gap-3 rounded-xl border p-3.5 text-left transition-colors ${category === name ? 'border-primary bg-accent' : 'border-border hover:bg-secondary'}`}><span className="rounded-xl bg-card p-2"><Car size={30} strokeWidth={1.4}/></span><div className="flex-1"><p className="text-xs font-bold">{name}</p><p className="mt-1 flex items-center gap-1 text-[10px] text-muted-foreground"><Users size={11}/> 4 · {i ? 'Extra room, extra comfort' : 'Your everyday, elevated'}</p></div><div className="text-right"><p className="text-sm font-bold">K{destination.price + i * 30}</p><p className="mt-1 text-[10px] text-muted-foreground">Demo fare</p></div>{category === name && <Check size={15} className="text-primary"/>}</button>)}
         <fieldset className="mt-5">
-          <legend className="mb-2 text-xs font-bold">Payment preference</legend>
+          <legend className="mb-2 text-xs font-bold">Payment preference</legend><button onClick={onSavedPayments} className="mb-3 text-[10px] font-bold text-primary">Manage saved payment methods</button>
           <div role="radiogroup" aria-label="Payment preference" className="grid grid-cols-2 gap-2">
             {['Cash', 'MTN MoMo', 'Airtel Money', 'Zamtel Kwacha'].map(p => <button type="button" role="radio" aria-checked={payment === p} key={p} onClick={() => setPayment(p)} className={`flex min-h-12 items-center gap-2 rounded-xl border px-3 py-3 text-left text-xs font-semibold ${payment === p ? 'border-primary bg-accent' : 'border-border hover:bg-secondary'}`}><Wallet size={16} className="shrink-0 text-primary"/><span className="flex-1">{p}</span>{payment === p && <Check size={13} className="shrink-0 text-primary"/>}</button>)}
           </div>
