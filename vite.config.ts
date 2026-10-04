@@ -16,7 +16,7 @@ export default defineConfig(({ mode }) => ({
   },
   plugins: [dyadComponentTagger(), react(), {
     name: 'kayan-driver-title',
-    transformIndexHtml: html => mode === 'driver' ? html.replace('<title>dyad-generated-app</title>', '<title>KAYAN Driver Demo</title>') : html,
+    transformIndexHtml: html => mode === 'driver' ? html.replace('<title>KAYAN Passenger Demo</title>', '<title>KAYAN Driver Demo</title>') : html,
   }],
   resolve: {
     alias: {

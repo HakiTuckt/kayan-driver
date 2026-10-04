@@ -1,42 +1,88 @@
-import { useState } from 'react';
-import { Car, LocateFixed, Minus, Plus, ShieldCheck } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
+import { LocateFixed, MapPin, ShieldCheck } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import useDeviceLocation from '@/hooks/useDeviceLocation';
 
 export default function KayanMap({ hasRoute, destination, stage = null }: { hasRoute: boolean; destination: string; stage?: number | null }) {
-  const [zoom, setZoom] = useState(1);
-  const driverPositions = [[310, 400], [390, 350], [445, 285], [580, 220]];
-  const driver = stage !== null ? driverPositions[stage] : null;
-  return (
-    <div className="relative min-h-[330px] w-full overflow-hidden rounded-2xl bg-[var(--map-base)] lg:h-full lg:min-h-[610px]">
-      <svg viewBox="0 0 900 760" role="img" aria-label="Illustrative Lusaka map, not a live navigation map" className="absolute inset-0 h-full w-full object-cover" preserveAspectRatio="xMidYMid slice">
-        <defs>
-          <pattern id="blocks" width="100" height="90" patternUnits="userSpaceOnUse" patternTransform="rotate(-18)"><path d="M0 0H100V90H0Z M30 0V90 M65 0V90 M0 40H100" fill="none" stroke="var(--map-grid)" strokeWidth="1"/><path d="M5 5H25V34H5Z M36 48H59V82H36Z M70 7H94V32H70Z" fill="var(--map-block)"/></pattern>
-        </defs>
-        <rect width="900" height="760" fill="var(--map-base)" />
-        <g transform={`translate(450 380) scale(${zoom}) translate(-450 -380)`}>
-          <rect x="-400" y="-400" width="1700" height="1600" fill="url(#blocks)"/>
-          <path d="M600 0Q565 80 620 160L760 190 805 110 770 0Z M15 530L110 490 175 530 120 650 0 700Z M640 580L715 520 860 600 890 740 690 760Z" fill="var(--map-park)"/>
-          <g fill="none" stroke="var(--map-street)" strokeWidth="5"><path d="M-30 210L205 150 440 215 630 100 920 180"/><path d="M100 -20L200 240 270 400 240 610 330 800"/><path d="M460 -20L440 215 475 460 600 800"/><path d="M750 -20L630 220 690 470 650 800"/><path d="M0 580L240 610 475 460 690 470 940 400"/><path d="M0 330L270 400 420 350 720 330 930 260"/></g>
-          <g fill="none" stroke="var(--map-road)" strokeWidth="8" strokeLinejoin="round"><path d="M-30 480L190 440 290 335 445 285 660 180 930 155"/><path d="M335 -20L355 190 445 285 480 445 590 555 625 800"/><path d="M-20 700L290 625 480 445 725 510 930 570"/></g>
-          <g fill="var(--map-label)" fontSize="12" className="map-label"><text x="70" y="105">GARDEN</text><text x="410" y="130">OLYMPIA PARK</text><text x="675" y="285">KALUNDU</text><text x="105" y="320">NORTHMEAD</text><text x="340" y="430">RHODES PARK</text><text x="120" y="555">MALUBA</text><text x="620" y="415">LONGACRES</text><text x="540" y="650">WOODLANDS</text><text x="220" y="700">KABWATA</text></g>
-          <g fill="var(--map-road-label)" fontSize="10"><text x="455" y="264" transform="rotate(-26 455 264)">Great East Road</text><text x="475" y="365" transform="rotate(78 475 365)">Addis Ababa Drive</text><text x="500" y="470" transform="rotate(15 500 470)">Independence Avenue</text><text x="70" y="450" transform="rotate(-10 70 450)">Manda Hill Road</text></g>
-          {hasRoute && <path d="M390 350L420 303 445 285 530 245 580 220" fill="none" stroke="#e79049" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round"/>}
-          <circle cx="390" cy="350" r="32" fill="#d87932" opacity=".13"/><circle cx="390" cy="350" r="19" fill="#d87932" opacity=".18"/><circle cx="390" cy="350" r="8" fill="#fff3df" stroke="#d87932" strokeWidth="4"/>
-          {hasRoute && <g><circle cx="580" cy="220" r="13" fill="#d87932" stroke="#fff3df" strokeWidth="3"/><circle cx="580" cy="220" r="4" fill="#fff3df"/></g>}
-          <g fill="#dae2d6" stroke="#103b2e" strokeWidth="2"><rect x="305" y="264" width="12" height="24" rx="5" transform="rotate(45 311 276)"/><rect x="545" y="417" width="12" height="24" rx="5" transform="rotate(-70 551 429)"/><rect x="240" y="472" width="12" height="24" rx="5" transform="rotate(35 246 484)"/><rect x="638" y="285" width="12" height="24" rx="5"/></g>
-          {driver && <g transform={`translate(${driver[0]} ${driver[1]})`}><circle r="22" fill="#062d24" stroke="#fff3df" strokeWidth="3"/><path d="M-9 -7H9V8H-9Z M-6 -11H6L9 -7H-9Z" fill="#e99755"/><circle cx="-6" cy="10" r="2" fill="#fff3df"/><circle cx="6" cy="10" r="2" fill="#fff3df"/></g>}
-        </g>
-      </svg>
-      <div className="absolute left-5 top-5 flex items-center gap-2 rounded-full border border-white/15 bg-[#062d24]/90 px-3.5 py-2 text-xs text-[#fff3df]"><span className="h-1.5 w-1.5 rounded-full bg-[#d87932]"/> Lusaka, Zambia <span className="text-[#b8c9b8]">· Illustrative map</span></div>
-      <div className="absolute right-4 top-20 flex flex-col gap-2">
-        <button className="map-control" aria-label="Reset map view" onClick={() => setZoom(1)}><LocateFixed size={18}/></button>
-        <button className="map-control" aria-label="Zoom in" disabled={zoom >= 1.8} onClick={() => setZoom(z => Math.min(1.8, z + .2))}><Plus size={18}/></button>
-        <button className="map-control" aria-label="Zoom out" disabled={zoom <= .8} onClick={() => setZoom(z => Math.max(.8, z - .2))}><Minus size={18}/></button>
-      </div>
-      <div className="absolute left-[37%] top-[48%] rounded-xl bg-[#fff8eb] px-3 py-2 text-xs font-semibold text-[#163b2c] shadow-xl"><span className="mr-1 inline-block h-2 w-2 rounded-full bg-primary"/> {hasRoute ? 'Your pickup' : 'Demo pickup'}<span className="mt-1 block text-[10px] font-normal text-[#546859]">Fixed illustrative pickup</span></div>
-      {hasRoute && <div className="absolute left-[56%] top-[24%] max-w-[160px] rounded-lg bg-primary px-3 py-2 text-xs font-bold text-white">{destination}</div>}
-      <div className="absolute bottom-5 left-5 right-5 flex items-center justify-between gap-3 rounded-xl border border-white/15 bg-[#062d24]/95 p-3.5 text-[#fff3df]">
-        <div className="flex items-center gap-3"><div className="rounded-lg bg-white/10 p-2"><ShieldCheck size={19} className="text-[#e99755]"/></div><div><p className="text-xs font-semibold">{stage === null ? 'A better way to get there.' : ['Demo driver approaching · 4 min', 'Demo driver at pickup', 'Demo trip in progress', 'Demo destination reached'][stage]}</p><p className="mt-0.5 text-[10px] text-[#b8c9b8]">{stage === null ? 'Clean cars. Professional service. Peace of mind.' : 'Stage-based simulation · not GPS or a live ETA'}</p></div></div><Car className="hidden text-[#b8c9b8] sm:block" size={22}/>
-      </div>
+  const container = useRef<HTMLDivElement>(null);
+  const map = useRef<L.Map | null>(null);
+  const tiles = useRef<L.TileLayer | null>(null);
+  const device = useRef<L.CircleMarker | null>(null);
+  const accuracy = useRef<L.Circle | null>(null);
+  const follow = useRef(true);
+  const [following, setFollowing] = useState(true);
+  const [tileError, setTileError] = useState(false);
+  const [tilesLoaded, setTilesLoaded] = useState(false);
+  const location = useDeviceLocation();
+  const { position, fresh, enabled } = location;
+
+  useEffect(() => {
+    if (!container.current) return;
+    const instance = L.map(container.current, { scrollWheelZoom: false }).setView([-15.4067, 28.2871], 13);
+    map.current = instance;
+    const layer = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors',
+    }).addTo(instance);
+    tiles.current = layer;
+    layer.on('tileerror', () => setTileError(true));
+    layer.on('tileload', () => setTilesLoaded(true));
+    instance.on('dragstart', () => { follow.current = false; setFollowing(false); });
+    const observer = new ResizeObserver(() => instance.invalidateSize());
+    observer.observe(container.current);
+    return () => {
+      observer.disconnect();
+      instance.remove();
+      map.current = null;
+      tiles.current = null;
+      device.current = null;
+      accuracy.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    const instance = map.current;
+    if (!instance) return;
+    if (!position || !enabled) {
+      device.current?.remove(); accuracy.current?.remove();
+      device.current = null; accuracy.current = null;
+      return;
+    }
+    const point: L.LatLngExpression = [position.coords.latitude, position.coords.longitude];
+    const color = fresh ? '#d87932' : '#64748b';
+    if (!device.current) device.current = L.circleMarker(point, { radius: 8, color: '#ffffff', weight: 3, fillOpacity: 1 }).addTo(instance);
+    device.current.setLatLng(point).setStyle({ fillColor: color });
+    device.current.bindTooltip(fresh ? 'Device-reported position' : 'Last fix · not current');
+    if (!accuracy.current) accuracy.current = L.circle(point, { weight: 1, fillOpacity: 0.12, interactive: false }).addTo(instance);
+    accuracy.current.setLatLng(point).setRadius(position.coords.accuracy).setStyle({ color, fillColor: color });
+    device.current.bringToFront();
+    if (follow.current && fresh) instance.setView(point, Math.max(15, instance.getZoom()), { animate: false });
+  }, [position, fresh, enabled]);
+
+  const center = () => {
+    follow.current = true; setFollowing(true);
+    if (position) map.current?.setView([position.coords.latitude, position.coords.longitude], 16);
+    else map.current?.setView([-15.4067, 28.2871], 13);
+  };
+  const status = !enabled ? 'Location off' : !location.foreground ? 'Paused · app not visible' : location.waiting ? 'Waiting for device fix…' : !fresh ? 'Last fix is stale · not current' : position && position.coords.accuracy > 50 ? 'Live fix · low accuracy' : 'Live device fix';
+
+  return <section className="flex h-full min-h-[610px] flex-col overflow-hidden rounded-2xl border bg-card">
+    <div className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3"><div className="flex items-center gap-2"><MapPin size={17} className="text-primary"/><div><p className="text-xs font-bold">Real map · OpenStreetMap</p><p className="mt-1 text-[10px] text-muted-foreground">{position ? 'Device position, not a demo driver' : 'Lusaka default view · not your location'}</p></div></div><span className="rounded-full bg-secondary px-3 py-1 text-[10px]">Internet needed for map tiles</span></div>
+    <div className="relative isolate min-h-[330px] flex-1 bg-secondary">
+      <div ref={container} aria-label="Interactive real map" className="absolute inset-0 z-0"/>
+      <button className="map-control absolute right-3 top-3 z-[400]" aria-label={position ? 'Center on device position' : 'Center on Lusaka default view'} onClick={center}><LocateFixed size={18}/></button>
+      {position && !following && <button onClick={center} className="absolute right-3 top-16 z-[400] rounded-xl border bg-card px-3 py-2 text-[10px] font-bold text-foreground shadow">Follow device</button>}
+      {(tileError || !tilesLoaded) && <div className="absolute bottom-9 left-3 right-3 z-[400] rounded-xl border bg-card p-3 text-[11px] text-foreground">{tileError ? 'Some map tiles could not load. Check your internet connection. Location readings remain independent of the map.' : 'Loading real map tiles…'}{tileError && <button onClick={() => { setTileError(false); tiles.current?.redraw(); }} className="ml-2 font-bold text-primary">Retry tiles</button>}</div>}
     </div>
-  );
+    <div className="space-y-3 border-t p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3"><div className="flex items-center gap-2"><span className={`h-2 w-2 rounded-full ${fresh ? 'bg-primary' : 'bg-muted-foreground'}`}/><p role="status" className="text-xs font-bold">{status}</p></div>{enabled ? <Button variant="outline" className="h-9 rounded-xl text-xs" onClick={location.stop}>Stop location</Button> : <Button className="kayan-action h-10 text-xs" onClick={() => { center(); location.start(); }}>Enable device location</Button>}</div>
+      {position && <div className="grid grid-cols-2 gap-2 rounded-xl bg-secondary p-3 text-[11px]"><div><p className="font-bold">Reported accuracy: ±{Math.round(position.coords.accuracy)} m</p><p className="mt-1 text-muted-foreground">{location.permission} · high accuracy requested</p></div><div><p className="font-bold">Fix age: {location.age}s {fresh ? '' : '· not current'}</p><p className="mt-1 break-words font-mono text-muted-foreground">{position.coords.latitude.toFixed(6)}, {position.coords.longitude.toFixed(6)}</p></div></div>}
+      {location.error && <p role="alert" className="rounded-xl border border-destructive/30 bg-background p-3 text-xs leading-5 text-destructive">{location.error}{enabled && <button onClick={location.start} className="ml-2 font-bold underline">Retry location</button>}</p>}
+      <p className="text-[10px] leading-5 text-muted-foreground">Opt-in foreground tracking only. Precise permission improves accuracy but cannot guarantee it. MuMu may supply a simulated position. Location is not saved or sent to KAYAN; map tile requests reveal the viewed area and IP to OpenStreetMap. <a href="https://osmfoundation.org/wiki/Privacy_Policy" target="_blank" rel="noopener noreferrer" className="underline">Map privacy</a></p>
+      <div className="flex items-start gap-2 rounded-xl bg-secondary p-3"><ShieldCheck size={16} className="mt-0.5 shrink-0 text-primary"/><p className="text-[10px] leading-5 text-muted-foreground"><strong className="text-foreground">{stage === null ? 'Trips remain simulated.' : ['Demo approaching pickup', 'Demo at pickup', 'Demo trip in progress', 'Demo drop-off reached'][stage]}</strong> {hasRoute ? `Demo destination: ${destination}. ` : ''}Pickup addresses, ride stages, fares and ETAs are not based on this device location. No live dispatch or turn-by-turn navigation.</p></div>
+      <a href="https://www.openstreetmap.org/fixthemap" target="_blank" rel="noopener noreferrer" className="inline-block text-[10px] text-muted-foreground underline">Report a map issue</a>
+    </div>
+  </section>;
 }

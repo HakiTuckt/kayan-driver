@@ -2,7 +2,7 @@
 
 ## Status
 
-Android packaging is configured with Capacitor. No APK has been compiled or device-tested in the editing workspace. The workflow must successfully complete before an APK exists. Native packaging dependencies are installed in CI, not required for the browser preview.
+Android packaging is configured with Capacitor. The user reports the previous passenger APK works on MuMu Player. Updated GPS/icon APKs have not been compiled or device-tested in this editing workspace. Run the workflow again to produce the updated artifact. Location and app lifecycle plugins are declared web/native dependencies; Android packaging tools are installed in CI.
 
 ## Get the APK without terminal commands
 
@@ -16,7 +16,7 @@ Only install the artifact from your own trusted repository and successful workfl
 
 ## What is included
 
-The current responsive passenger demo is bundled locally: booking previews, themes, simulated driver stages, local chat/call screens and website demo forms. The application name is **KAYAN Demo**, with provisional application ID `com.kayan.passenger.demo`. No real GPS, VoIP, dispatch, payment processing, accounts or uploads are connected. Fonts may fall back to system fonts without internet access. Native document downloads, file picking, navigation/back handling, clipboard and layout still require device testing. No camera, microphone or location plugins have been added.
+The current responsive passenger demo is bundled locally: booking previews, themes, simulated driver stages, local chat/call screens and website demo forms. The application name is **KAYAN Demo**, with provisional application ID `com.kayan.passenger.demo`. Real foreground device location and a Leaflet/OpenStreetMap map are connected on explicit opt-in. VoIP, dispatch, payment processing, accounts and uploads remain demos. Fonts may fall back to system fonts without internet access. Native document downloads, file picking, navigation/back handling, clipboard and layout still require device testing. Only foreground location permissions are added; no camera, microphone or background tracking permissions. The existing eagle supplies web and native launcher branding. See [GPS_ANDROID_TESTING.md](GPS_ANDROID_TESTING.md) for privacy and device acceptance checks.
 
 ## Signing and production
 

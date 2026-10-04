@@ -42,6 +42,9 @@ jobs:
           npx --no-install cap add android
           npx --no-install cap sync android
 
+      - name: Apply foreground location permissions and KAYAN launcher icons
+        run: node src/android/prepare-android.mjs
+
       - name: Compile debug APK
         working-directory: android
         run: bash gradlew assembleDebug --no-daemon

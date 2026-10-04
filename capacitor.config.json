@@ -3,7 +3,8 @@
   "appName": "KAYAN Demo",
   "webDir": "dist",
   "android": {
-    "allowMixedContent": false
+    "allowMixedContent": false,
+    "appendUserAgent": " KAYANPassengerDemo/0.0.0"
   },
   "server": {
     "androidScheme": "https"

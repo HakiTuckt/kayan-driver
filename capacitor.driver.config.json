@@ -3,7 +3,8 @@
   "appName": "KAYAN Driver Demo",
   "webDir": "dist-driver",
   "android": {
-    "allowMixedContent": false
+    "allowMixedContent": false,
+    "appendUserAgent": " KAYANDriverDemo/0.0.0"
   },
   "server": {
     "androidScheme": "https"

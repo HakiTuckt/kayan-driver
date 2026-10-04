@@ -26,7 +26,7 @@ First launch asks for fictional contact and vehicle information and sample docum
 
 Light/Dark/System selection uses the independent `kayan-driver-theme` device preference. The passenger theme key is unchanged. **Restart pre-registration** clears the introduction flag and session data without changing the theme.
 
-All requests are locally generated. Pickup and trip progression are manual, the map is illustrative, chat replies are scripted, and call connection is visual only (no audio, telephone link, microphone, or location access). Completed fares form illustrative gross totals; actual payable balance is zero. No real dispatch, payments, wallet, payouts, uploads, document review, or approval occur. Subscription pricing and rewards remain **unfinalized**; the demo defines no plans, prices, or rewards.
+All requests are locally generated. Pickup and trip progression are manual. The map is now a real Leaflet/OpenStreetMap map with optional foreground device location, an accuracy circle and fix age. Device location is separate from trip simulation. Chat replies are scripted and call connection is visual only (no audio, telephone link or microphone). See [GPS_ANDROID_TESTING.md](GPS_ANDROID_TESTING.md) for permissions, privacy and GPS acceptance checks. Completed fares form illustrative gross totals; actual payable balance is zero. No real dispatch, payments, wallet, payouts, uploads, document review, or approval occur. Subscription pricing and rewards remain **unfinalized**; the demo defines no plans, prices, or rewards.
 
 ## Device acceptance checklist
 
@@ -38,6 +38,6 @@ All requests are locally generated. Pickup and trip progression are manual, the 
 - Test chat, call connection/end, trip cancellation, earnings and history. Only completed trips contribute fares.
 - Confirm the online toggle is locked during a trip and offline removes pending requests.
 - Restart pre-registration and verify all session data is cleared.
-- Check narrow screens, keyboard interaction, Android back behavior, and no real permission/payment/upload prompts.
+- Check narrow screens, keyboard interaction, Android back behavior, and no payment/upload prompts. Foreground location permission should appear only after explicitly enabling device location. Confirm eagle launcher icons on both apps.
 
 Google Fonts are optional external presentation resources; app simulation does not need a backend. Without network access, system font fallbacks are used. Production dispatch, approval, subscriptions, payments, signing, and store publication are outside this demo workflow.
