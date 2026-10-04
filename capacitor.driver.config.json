@@ -1,0 +1,11 @@
+{
+  "appId": "com.kayan.driver.demo",
+  "appName": "KAYAN Driver Demo",
+  "webDir": "dist-driver",
+  "android": {
+    "allowMixedContent": false
+  },
+  "server": {
+    "androidScheme": "https"
+  }
+}

@@ -73,6 +73,7 @@
   "private": true,
   "scripts": {
     "build": "vite build",
+    "build:driver": "vite build --mode driver",
     "build:dev": "vite build --mode development",
     "dev": "vite",
     "lint": "eslint .",
