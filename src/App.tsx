@@ -7,6 +7,7 @@ import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import Website from "./pages/Website";
 import Driver from "./pages/Driver";
+import Projects from "./pages/Projects";
 import { ThemeProvider } from "next-themes";
 
 const queryClient = new QueryClient();
@@ -24,6 +25,7 @@ function AppRoutes() {
           <Route path="/" element={driverBuild ? <Driver /> : <Index />} />
           <Route path="/driver" element={<Driver />} />
           {!driverBuild && <Route path="/website" element={<Website />} />}
+          <Route path="/projects" element={<Projects />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </TooltipProvider>

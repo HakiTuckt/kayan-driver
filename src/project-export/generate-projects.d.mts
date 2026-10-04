@@ -1,0 +1,1 @@
+export function generateProjects(outputDirectory: string, verify?: boolean): Promise<{ variant: string; filename: string; packageId: string; bytes: number; sha256: string; files: number; standaloneWebBuildVerified: boolean }[]>;
