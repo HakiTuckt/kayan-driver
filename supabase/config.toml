@@ -1,2 +1,2 @@
-[functions.yoola-send-sms]
+[functions.whatsapp-send-otp]
 verify_jwt = false

@@ -1,4 +1,4 @@
-name: Deploy KAYAN Yoola WhatsApp hook
+name: Deploy KAYAN WhatsApp OTP hook
 
 on:
   workflow_dispatch:
@@ -26,8 +26,8 @@ jobs:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
 
-      - name: Deploy WhatsApp hook
-        run: supabase functions deploy yoola-send-sms --project-ref "$SUPABASE_PROJECT_REF" --no-verify-jwt
+      - name: Deploy WhatsApp OTP hook
+        run: supabase functions deploy whatsapp-send-otp --project-ref "$SUPABASE_PROJECT_REF" --no-verify-jwt
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}

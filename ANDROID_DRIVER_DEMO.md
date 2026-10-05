@@ -20,7 +20,7 @@ The isolated runner builds driver mode, replaces the runner’s Capacitor config
 
 **A local debug APK has been compiled and its archive and signing certificate validated, but it has not been installed or device-tested.** GitHub Actions must complete separately to produce the downloadable workflow artifact. Do not describe the demo as device-validated until the APK has been installed and the checks below pass.
 
-The checked-in `kayan-driver-ui-test.apk` predates the phone OTP changes. Build a fresh artifact after configuring and testing the Supabase Send SMS hook with Yoola WhatsApp delivery; the checked-in APK cannot validate phone registration or sign-in.
+The checked-in `kayan-driver-ui-test.apk` predates the phone OTP changes. Build a fresh artifact after configuring and testing the Supabase phone-auth hook with Meta WhatsApp Cloud API delivery; the checked-in APK cannot validate phone registration or sign-in.
 
 ## Demo behavior and data
 
