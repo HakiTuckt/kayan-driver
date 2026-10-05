@@ -17,7 +17,7 @@ const documents: { type: DriverDocumentType; label: string }[] = [
 const maximumFileSize = 10 * 1024 * 1024;
 const profileSteps: { key: keyof DriverProfile; label: string; title: string; description: string; placeholder: string; type?: string; optional?: boolean }[] = [
   { key: 'name', label: 'Full name', title: 'What is your full name?', description: 'Enter the name to be used when reviewing your application.', placeholder: 'e.g. Alex Banda' },
-  { key: 'phone', label: 'Phone number', title: 'Verify your phone number', description: 'We’ll text you a one-time code. Enter a Zambian number in local or +260 format.', placeholder: '+260 970 000 000', type: 'tel' },
+  { key: 'phone', label: 'Phone number', title: 'Verify your phone number', description: 'We’ll send a one-time code to your WhatsApp. Enter a Zambian number in local or +260 format.', placeholder: '+260 970 000 000', type: 'tel' },
   { key: 'city', label: 'City', title: 'Where will you drive?', description: 'Enter the city where you plan to drive.', placeholder: 'Lusaka' },
   { key: 'make', label: 'Vehicle make', title: 'What vehicle will you use?', description: 'Enter the manufacturer shown on the vehicle documents.', placeholder: 'e.g. Toyota' },
   { key: 'model', label: 'Vehicle model', title: 'What is the model?', description: 'Enter the model shown on the vehicle documents.', placeholder: 'e.g. Corolla' },
@@ -46,6 +46,7 @@ export default function DriverRegistration({
   const [phoneCodeSent, setPhoneCodeSent] = useState(false);
   const [phoneCode, setPhoneCode] = useState('');
   const [phoneVerified, setPhoneVerified] = useState(phoneAlreadyVerified);
+  const [whatsappConsent, setWhatsappConsent] = useState(false);
   const [phoneBusy, setPhoneBusy] = useState(false);
   const [phoneError, setPhoneError] = useState('');
   const [consent, setConsent] = useState(false);
@@ -63,6 +64,10 @@ export default function DriverRegistration({
 
   const sendPhoneCode = async () => {
     setPhoneError('');
+    if (!whatsappConsent) {
+      setPhoneError('Agree to receive the verification code on WhatsApp before continuing.');
+      return;
+    }
     setPhoneBusy(true);
     try {
       const result = await sendDriverPhoneLinkOtp(profile.phone);
@@ -163,12 +168,12 @@ export default function DriverRegistration({
         </span>
         <h1 className="text-2xl font-extrabold leading-tight tracking-tight sm:text-3xl">
           {phoneStep && phoneVerified ? 'Phone number verified'
-            : phoneStep && phoneCodeSent ? 'Enter your SMS code'
+            : phoneStep && phoneCodeSent ? 'Enter your WhatsApp code'
               : currentProfileStep?.title ?? (currentDocument ? `Upload your ${currentDocument.label.toLowerCase()}` : 'Ready to submit your application?')}
         </h1>
         <p className="mt-2 text-sm leading-6 text-muted-foreground">
           {phoneStep && phoneVerified ? 'This verified number will be used to sign in to your driver account.'
-            : phoneStep && phoneCodeSent ? `Enter the 6-digit code sent to ${profile.phone}.`
+            : phoneStep && phoneCodeSent ? `Enter the 6-digit WhatsApp code sent to ${profile.phone}.`
               : currentProfileStep?.description ?? (currentDocument
                 ? 'Required · PDF, JPG, or PNG · 10 MB maximum. Your file will be uploaded to private KAYAN storage.'
                 : 'Your profile, vehicle, and required documents will be stored in KAYAN’s private application storage. This demo has no staff review or approval.')}
@@ -177,7 +182,7 @@ export default function DriverRegistration({
 
       <form onSubmit={advance}>
         {currentProfileStep && <div className="space-y-2">
-          <Label htmlFor={`driver-profile-${currentProfileStep.key}`} className="text-xs font-semibold">{phoneStep && phoneCodeSent ? '6-digit SMS code' : currentProfileStep.label}{currentProfileStep.optional ? ' (optional)' : ''}</Label>
+          <Label htmlFor={`driver-profile-${currentProfileStep.key}`} className="text-xs font-semibold">{phoneStep && phoneCodeSent ? '6-digit WhatsApp code' : currentProfileStep.label}{currentProfileStep.optional ? ' (optional)' : ''}</Label>
           <Input
             autoFocus
             id={`driver-profile-${currentProfileStep.key}`}
@@ -198,6 +203,7 @@ export default function DriverRegistration({
                   setPhoneVerified(false);
                   setPhoneCodeSent(false);
                   setPhoneCode('');
+                  setWhatsappConsent(false);
                   setPhoneError('');
                 }
               }
@@ -205,8 +211,13 @@ export default function DriverRegistration({
             className="h-12 rounded-xl bg-background"
           />
           {phoneError && <p role="alert" className="text-xs text-destructive">{phoneError}</p>}
-          {phoneStep && phoneCodeSent && <Button type="button" variant="link" className="h-auto px-0 text-xs" onClick={() => void sendPhoneCode()} disabled={phoneBusy}>Resend code</Button>}
+          {phoneStep && phoneCodeSent && <Button type="button" variant="link" className="h-auto px-0 text-xs" onClick={() => void sendPhoneCode()} disabled={phoneBusy}>Resend WhatsApp code</Button>}
         </div>}
+
+        {phoneStep && !phoneCodeSent && !phoneVerified && <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-xl border bg-background p-3 text-xs leading-5">
+          <input required type="checkbox" className="mt-1 h-4 w-4 shrink-0 accent-[var(--copper)]" checked={whatsappConsent} onChange={event => setWhatsappConsent(event.target.checked)}/>
+          <span>I agree to receive a WhatsApp verification message from KAYAN at this number.</span>
+        </label>}
 
         {currentDocument && <div className="space-y-2">
           <Label htmlFor={`driver-document-${currentDocument.type}`} className="text-xs font-semibold">{currentDocument.label} file</Label>
@@ -233,13 +244,13 @@ export default function DriverRegistration({
 
         {consentStep && <label className="flex cursor-pointer items-start gap-3 rounded-2xl border bg-background p-4 text-sm leading-6">
           <input required type="checkbox" className="mt-1 h-5 w-5 shrink-0 accent-[var(--copper)]" checked={consent} onChange={event => setConsent(event.target.checked)}/>
-          <span>I agree to submit my profile, vehicle details, and the four selected documents to KAYAN’s private application storage. My phone is verified by SMS; no email confirmation, staff review, or approval is available in this demo.</span>
+          <span>I agree to submit my profile, vehicle details, and the four selected documents to KAYAN’s private application storage. My phone is verified through WhatsApp; no email confirmation, staff review, or approval is available in this demo.</span>
         </label>}
 
         <div className="mt-8 flex gap-3">
           {step > 0 && <Button type="button" variant="outline" className="h-12 rounded-xl px-4" onClick={goBack}><ArrowLeft size={16} className="mr-2"/>Back</Button>}
           <Button type="submit" disabled={saving || phoneBusy || (!!currentDocument && !uploads[currentDocument.type])} className="kayan-action flex-1">
-            {saving ? 'Submitting application…' : phoneBusy ? phoneCodeSent ? 'Verifying code…' : 'Sending code…' : phoneStep && !phoneVerified ? phoneCodeSent ? 'Verify & continue' : 'Send SMS code' : consentStep ? 'Submit application' : 'Continue'}{!saving && !phoneBusy && <ArrowRight size={17} className="ml-2"/>}
+            {saving ? 'Submitting application…' : phoneBusy ? phoneCodeSent ? 'Verifying code…' : 'Sending code…' : phoneStep && !phoneVerified ? phoneCodeSent ? 'Verify & continue' : 'Send WhatsApp code' : consentStep ? 'Submit application' : 'Continue'}{!saving && !phoneBusy && <ArrowRight size={17} className="ml-2"/>}
           </Button>
         </div>
         {saveError && <p role="alert" className="mt-4 rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-xs leading-5 text-destructive">{saveError}</p>}

@@ -20,11 +20,11 @@ The isolated runner builds driver mode, replaces the runner’s Capacitor config
 
 **A local debug APK has been compiled and its archive and signing certificate validated, but it has not been installed or device-tested.** GitHub Actions must complete separately to produce the downloadable workflow artifact. Do not describe the demo as device-validated until the APK has been installed and the checks below pass.
 
-The checked-in `kayan-driver-ui-test.apk` predates the phone OTP changes. Build a fresh artifact after configuring and testing the Supabase Send SMS hook; the checked-in APK cannot validate phone registration or sign-in.
+The checked-in `kayan-driver-ui-test.apk` predates the phone OTP changes. Build a fresh artifact after configuring and testing the Supabase Send SMS hook with Yoola WhatsApp delivery; the checked-in APK cannot validate phone registration or sign-in.
 
 ## Demo behavior and data
 
-First launch asks for driver contact and vehicle information, then presents SMS code verification as its own registration progress step before requiring a driving licence, national registration card, vehicle registration, and roadworthiness certificate file (PDF/JPG/PNG, maximum 10 MiB each). Back from code entry returns to the phone field. The verified phone is linked to the current Supabase identity, preserving its private profile and document storage. Returning drivers can sign in with phone OTP on another device. This is passwordless phone authentication, not true 2FA; the test build has no staff review or approval flow. Do not upload genuine identity documents. Trip history, chat, earnings, and availability reset on reload; online starts off.
+First launch asks for driver contact and vehicle information, then presents WhatsApp code verification as its own registration progress step before requiring a driving licence, national registration card, vehicle registration, and roadworthiness certificate file (PDF/JPG/PNG, maximum 10 MiB each). The driver must explicitly consent to the WhatsApp message. Back from code entry returns to the phone field. The verified phone is linked to the current Supabase identity, preserving its private profile and document storage. Returning drivers can sign in with phone OTP on another device. This is passwordless phone authentication, not true 2FA; the test build has no staff review or approval flow. Do not upload genuine identity documents. Trip history, chat, earnings, and availability reset on reload; online starts off.
 
 Light/Dark/System selection uses the independent `kayan-driver-theme` device preference. The passenger theme key is unchanged. **Restart pre-registration** clears the introduction flag and session data without changing the theme.
 

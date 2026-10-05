@@ -127,7 +127,7 @@ export async function saveDemoDriverProfile(profile: DriverProfile, documents: D
   const authUser = sessionData.session?.user;
   const userId = authUser?.id;
   if (!userId) throw new Error('Verify your phone number before submitting the driver application.');
-  if (!authUser.phone || !authUser.phone_confirmed_at) throw new Error('Your Supabase phone number is not verified. Request and enter the SMS code before submitting.');
+  if (!authUser.phone || !authUser.phone_confirmed_at) throw new Error('Your Supabase phone number is not verified. Request and enter the WhatsApp code before submitting.');
   const verifiedPhone = normalizeDriverPhone(profile.phone);
   if (authUser.phone !== verifiedPhone) throw new Error('The verified phone number does not match the application. Verify the application phone number again.');
 

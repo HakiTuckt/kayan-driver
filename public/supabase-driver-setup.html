@@ -28,7 +28,7 @@
         <li>Sign in to Supabase and open your KAYAN project.</li>
         <li>In the left menu, open <strong>SQL Editor</strong>, then click <strong>New query</strong>.</li>
         <li>For the first setup only, copy the private driver-data SQL, paste it into Supabase, and click <strong>Run</strong>. If you already ran it successfully, do not run it again.</li>
-        <li>In Supabase, open <strong>Authentication → Sign In / Providers</strong> and enable <strong>Anonymous sign-ins</strong> and <strong>Phone</strong>. Phone OTP will not work until the maintainer deploys and configures the Yoola SMS hook.</li>
+        <li>In Supabase, open <strong>Authentication → Sign In / Providers</strong> and enable <strong>Anonymous sign-ins</strong> and <strong>Phone</strong>. WhatsApp OTP will not work until the maintainer deploys and configures the Yoola WhatsApp hook.</li>
         <li>In <strong>Table Editor</strong>, confirm there are tables named <code>driver_profiles</code>, <code>driver_vehicles</code>, and <code>driver_documents</code>. In <strong>Storage</strong>, confirm <code>driver-documents</code> is private.</li>
       </ol>
 
@@ -37,7 +37,7 @@
 
       <p><strong>If Supabase shows an error:</strong> do not repeatedly run the query. Copy the error message (but not any keys or passwords) and send it to me so I can help safely.</p>
       <p>After the initial database migration succeeds, the KAYAN app maintainer configures the project URL and public/publishable key in the app build settings. The Driver app itself never asks drivers to provide these values.</p>
-      <p class="note">A demo account can be recovered with its verified phone only after Supabase Phone authentication and the Yoola SMS hook are configured and tested. Do not enter real driver details or upload real identity documents. This demo saves only fictional profile and vehicle data.</p>
+      <p class="note">A demo account can be recovered with its verified phone only after Supabase Phone authentication and the Yoola WhatsApp hook are configured and tested. The driver must consent to WhatsApp messages and have WhatsApp available on the verified number. Do not enter real driver details or upload real identity documents. This demo saves only fictional profile and vehicle data.</p>
     </main>
     <script>
       const status = document.querySelector('#status');

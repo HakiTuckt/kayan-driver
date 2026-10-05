@@ -16,10 +16,9 @@ Deno.serve(async request => {
 
   const hookSecret = Deno.env.get('SEND_SMS_HOOK_SECRET');
   const yoolaApiKey = Deno.env.get('YOOLA_API_KEY');
-  const sender = Deno.env.get('YOOLA_SENDER_ID');
   if (!hookSecret || !yoolaApiKey) {
-    console.error('Required SMS hook or Yoola credentials are not configured.');
-    return jsonResponse({ error: 'SMS delivery is not configured.' }, 500);
+    console.error('Required WhatsApp hook or Yoola credentials are not configured.');
+    return jsonResponse({ error: 'WhatsApp delivery is not configured.' }, 500);
   }
 
   let event: SmsHookEvent;
@@ -27,44 +26,44 @@ Deno.serve(async request => {
     const secret = hookSecret.replace(/^v1,whsec_/, '');
     event = new Webhook(secret).verify(await request.text(), Object.fromEntries(request.headers)) as SmsHookEvent;
   } catch {
-    return jsonResponse({ error: 'Invalid SMS hook signature.' }, 401);
+    return jsonResponse({ error: 'Invalid phone-auth hook signature.' }, 401);
   }
 
   const phone = event.user?.phone;
   const otp = event.sms?.otp;
   if (!phone || !/^\+[1-9]\d{7,14}$/.test(phone) || !otp || !/^\d{6}$/.test(otp)) {
-    return jsonResponse({ error: 'The SMS hook payload is incomplete or invalid.' }, 400);
+    return jsonResponse({ error: 'The phone-auth hook payload is incomplete or invalid.' }, 400);
   }
 
-  const message = `KAYAN verification code: ${otp}. Do not share this code.`;
   let response: Response;
   try {
-    response = await fetch('https://yoolasms.com/api/v1/send', {
+    response = await fetch('https://yoolasms.com/api/v1/send-whatsapp', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         api_key: yoolaApiKey,
         phone: phone.slice(1),
-        message,
-        ...(sender ? { sender } : {}),
+        template_name: 'yoola_otp_verification',
+        template_params: [otp],
+        consent: 'yes',
       }),
     });
   } catch {
-    console.error('Could not reach the Yoola SMS API.');
-    return jsonResponse({ error: 'The SMS provider could not be reached.' }, 502);
+    console.error('Could not reach the Yoola WhatsApp API.');
+    return jsonResponse({ error: 'The WhatsApp provider could not be reached.' }, 502);
   }
 
   let providerResult: { status?: string } | null = null;
   try {
     providerResult = await response.json();
   } catch {
-    console.error('Yoola returned an unreadable SMS response.', { status: response.status });
-    return jsonResponse({ error: 'The SMS provider returned an invalid response.' }, 502);
+    console.error('Yoola returned an unreadable WhatsApp response.', { status: response.status });
+    return jsonResponse({ error: 'The WhatsApp provider returned an invalid response.' }, 502);
   }
 
-  if (!response.ok || providerResult?.status !== 'success') {
-    console.error('Yoola did not accept the SMS request.', { status: response.status });
-    return jsonResponse({ error: 'The SMS provider rejected the message.' }, 502);
+  if (!response.ok || !['queued', 'success'].includes(providerResult?.status ?? '')) {
+    console.error('Yoola did not accept the WhatsApp request.', { status: response.status });
+    return jsonResponse({ error: 'The WhatsApp provider rejected the message.' }, 502);
   }
 
   return new Response(null, { status: 200 });

@@ -33,7 +33,7 @@ export async function sendDriverPhoneLinkOtp(value: string) {
 
 export async function verifyDriverPhoneLinkOtp(value: string, token: string) {
   const phone = normalizeDriverPhone(value);
-  if (!/^\d{6}$/.test(token)) throw new Error('Enter the 6-digit code from the SMS.');
+  if (!/^\d{6}$/.test(token)) throw new Error('Enter the 6-digit code from WhatsApp.');
   const { data, error } = await getSupabaseClient().auth.verifyOtp({ phone, token, type: 'phone_change' });
   if (error) throw new Error(`Could not verify this phone number: ${error.message}`);
   if (data.user?.phone !== phone || !data.user.phone_confirmed_at) {
@@ -54,7 +54,7 @@ export async function sendDriverPhoneLoginOtp(value: string) {
 
 export async function verifyDriverPhoneLoginOtp(value: string, token: string) {
   const phone = normalizeDriverPhone(value);
-  if (!/^\d{6}$/.test(token)) throw new Error('Enter the 6-digit code from the SMS.');
+  if (!/^\d{6}$/.test(token)) throw new Error('Enter the 6-digit code from WhatsApp.');
   const { data, error } = await getSupabaseClient().auth.verifyOtp({ phone, token, type: 'sms' });
   if (error) throw new Error(`Could not sign in with this phone number: ${error.message}`);
   if (data.user?.phone !== phone || !data.user.phone_confirmed_at) {
