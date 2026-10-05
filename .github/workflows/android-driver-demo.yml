@@ -31,8 +31,29 @@ jobs:
       - name: Install web dependencies
         run: npm install
 
+      - name: Verify Google Maps API keys are configured
+        run: |
+          test -n "$VITE_GOOGLE_MAPS_API_KEY" || { echo "::error::Add the GOOGLE_MAPS_API_KEY repository secret for browser/Routes API requests."; exit 1; }
+          test -n "$GOOGLE_MAPS_ANDROID_API_KEY" || { echo "::error::Add the GOOGLE_MAPS_ANDROID_API_KEY repository secret for the Android Maps SDK."; exit 1; }
+          test -n "$ANDROID_DEBUG_KEYSTORE_BASE64" || { echo "::error::Add the ANDROID_DEBUG_KEYSTORE_BASE64 repository secret so the app-restricted Android Maps key matches this APK."; exit 1; }
+        env:
+          VITE_GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
+          GOOGLE_MAPS_ANDROID_API_KEY: ${{ secrets.GOOGLE_MAPS_ANDROID_API_KEY }}
+          ANDROID_DEBUG_KEYSTORE_BASE64: ${{ secrets.ANDROID_DEBUG_KEYSTORE_BASE64 }}
+
+      - name: Install stable debug signing key
+        run: |
+          mkdir -p "$HOME/.android"
+          printf '%s' "$ANDROID_DEBUG_KEYSTORE_BASE64" | base64 --decode > "$HOME/.android/debug.keystore"
+          keytool -list -keystore "$HOME/.android/debug.keystore" -storepass android -alias AndroidDebugKey >/dev/null
+        env:
+          ANDROID_DEBUG_KEYSTORE_BASE64: ${{ secrets.ANDROID_DEBUG_KEYSTORE_BASE64 }}
+
       - name: Build standalone driver web app
         run: npm run build:driver
+        env:
+          VITE_GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
+          VITE_GOOGLE_MAPS_ANDROID_API_KEY: ${{ secrets.GOOGLE_MAPS_ANDROID_API_KEY }}
 
       - name: Select isolated driver packaging configuration
         run: |
@@ -49,6 +70,8 @@ jobs:
 
       - name: Apply foreground location permissions and KAYAN launcher icons
         run: node src/android/prepare-android.mjs
+        env:
+          GOOGLE_MAPS_ANDROID_API_KEY: ${{ secrets.GOOGLE_MAPS_ANDROID_API_KEY }}
 
       - name: Compile driver debug APK
         working-directory: android

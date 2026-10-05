@@ -13,6 +13,20 @@ for (const permission of permissions) {
 if (!manifest.includes('android.hardware.location.gps')) declarations += '    <uses-feature android:name="android.hardware.location.gps" android:required="false" />\n';
 manifest = manifest.replace(/(<manifest\b[^>]*>)/, `$1\n${declarations}`);
 if (manifest.includes('android.permission.ACCESS_BACKGROUND_LOCATION')) throw new Error('Background location is outside the demo permission scope');
+const androidMapsKey = process.env.GOOGLE_MAPS_ANDROID_API_KEY?.trim();
+if (androidMapsKey) {
+  const xmlKey = androidMapsKey.replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+  const metadata = `        <meta-data android:name="com.google.android.geo.API_KEY" android:value="${xmlKey}" />`;
+  if (manifest.includes('android:name="com.google.android.geo.API_KEY"')) {
+    const updatedManifest = manifest.replace(/^\s*<meta-data android:name="com\.google\.android\.geo\.API_KEY"[^>]*\/>\s*$/m, metadata);
+    if (updatedManifest === manifest) throw new Error('Could not update the existing Android Maps API key metadata.');
+    manifest = updatedManifest;
+  } else {
+    const updatedManifest = manifest.replace(/(<application\b[^>]*>)/, `$1\n${metadata}`);
+    if (updatedManifest === manifest) throw new Error('Could not find the Android application manifest element for Maps API key metadata.');
+    manifest = updatedManifest;
+  }
+}
 await fs.writeFile(manifestPath, manifest);
 
 const res = path.join(root, 'res');

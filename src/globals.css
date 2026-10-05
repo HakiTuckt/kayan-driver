@@ -73,6 +73,8 @@
   .map-control { @apply flex h-10 w-10 items-center justify-center rounded-xl border border-white/15 bg-[#123d31] text-[#fff3df] shadow-lg hover:bg-[#245440]; }
 }
 .map-label { font-family: 'DM Sans', sans-serif; letter-spacing: 2px; }
+.native-google-map-section,
+.native-google-map-viewport { background-color: transparent !important; }
 @keyframes enter { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
 .enter { animation: enter .4s ease-out; }
 @media (prefers-reduced-motion: reduce) { .enter { animation: none; } }

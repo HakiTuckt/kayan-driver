@@ -5,7 +5,7 @@ import { deflateRawSync, inflateRawSync } from 'node:zlib';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 
-const rootFiles = ['pnpm-lock.yaml', 'pnpm-workspace.yaml', 'tsconfig.json', 'tsconfig.app.json', 'tsconfig.node.json', 'tailwind.config.ts', 'postcss.config.js', 'components.json', 'eslint.config.js', 'GPS_ANDROID_TESTING.md'];
+const rootFiles = ['pnpm-lock.yaml', 'pnpm-workspace.yaml', 'tsconfig.json', 'tsconfig.app.json', 'tsconfig.node.json', 'tailwind.config.ts', 'postcss.config.js', 'components.json', 'eslint.config.js', 'GPS_ANDROID_TESTING.md', 'ANDROID_DRIVER_DEMO.md'];
 const crcTable = Array.from({ length: 256 }, (_, n) => { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; return c >>> 0; });
 const crc32 = buffer => { let c = 0xffffffff; for (const b of buffer) c = crcTable[(c ^ b) & 255] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; };
 async function entries(directory, prefix = '') {
@@ -56,7 +56,7 @@ export default function App() {
 }
 `;
 }
-function workflow(label) {
+function workflow(label, driver) {
   return `name: Build KAYAN ${label} APK
 on:
   workflow_dispatch:
@@ -84,11 +84,33 @@ jobs:
       - uses: android-actions/setup-android@v4
       - name: Install locked web and location dependencies
         run: pnpm install --frozen-lockfile
+${driver ? `      - name: Verify Google Maps API keys are configured
+        run: |
+          test -n "$VITE_GOOGLE_MAPS_API_KEY" || { echo "::error::Add the GOOGLE_MAPS_API_KEY repository secret for browser/Routes API requests."; exit 1; }
+          test -n "$GOOGLE_MAPS_ANDROID_API_KEY" || { echo "::error::Add the GOOGLE_MAPS_ANDROID_API_KEY repository secret for the Android Maps SDK."; exit 1; }
+          test -n "$ANDROID_DEBUG_KEYSTORE_BASE64" || { echo "::error::Add the ANDROID_DEBUG_KEYSTORE_BASE64 repository secret so the app-restricted Android Maps key matches this APK."; exit 1; }
+        env:
+          VITE_GOOGLE_MAPS_API_KEY: \${{ secrets.GOOGLE_MAPS_API_KEY }}
+          GOOGLE_MAPS_ANDROID_API_KEY: \${{ secrets.GOOGLE_MAPS_ANDROID_API_KEY }}
+          ANDROID_DEBUG_KEYSTORE_BASE64: \${{ secrets.ANDROID_DEBUG_KEYSTORE_BASE64 }}
+` : ''}
+${driver ? `      - name: Install stable debug signing key
+        run: |
+          mkdir -p "$HOME/.android"
+          printf '%s' "$ANDROID_DEBUG_KEYSTORE_BASE64" | base64 --decode > "$HOME/.android/debug.keystore"
+          keytool -list -keystore "$HOME/.android/debug.keystore" -storepass android -alias AndroidDebugKey >/dev/null
+        env:
+          ANDROID_DEBUG_KEYSTORE_BASE64: \${{ secrets.ANDROID_DEBUG_KEYSTORE_BASE64 }}
+` : ''}
       - name: Type check and build web app
         run: |
           pnpm exec tsc --noEmit -p tsconfig.app.json
           pnpm exec tsc --noEmit -p tsconfig.node.json
           pnpm run build
+${driver ? `        env:
+          VITE_GOOGLE_MAPS_API_KEY: \${{ secrets.GOOGLE_MAPS_API_KEY }}
+          VITE_GOOGLE_MAPS_ANDROID_API_KEY: \${{ secrets.GOOGLE_MAPS_ANDROID_API_KEY }}
+` : ''}
       - name: Install Android packaging tools in separate directory
         run: npm install --prefix .apk-tools --no-package-lock @capacitor/cli@7 @capacitor/android@7
       - name: Make Android package visible to Capacitor
@@ -98,6 +120,8 @@ jobs:
           node .apk-tools/node_modules/@capacitor/cli/bin/capacitor add android
           node .apk-tools/node_modules/@capacitor/cli/bin/capacitor sync android
           node src/android/prepare-android.mjs
+        env:
+          GOOGLE_MAPS_ANDROID_API_KEY: \${{ secrets.GOOGLE_MAPS_ANDROID_API_KEY }}
       - name: Compile debug APK
         working-directory: android
         run: bash gradlew assembleDebug --no-daemon
@@ -146,8 +170,33 @@ export async function generateProjects(outputDirectory, verify = false) {
       }
       await fs.writeFile(path.join(project, '.gitignore'), 'node_modules/\ndist/\nandroid/\n.apk-tools/\n.env*\n*.local\n*.log\n');
       await fs.mkdir(path.join(project, '.github/workflows'), { recursive: true });
-      await fs.writeFile(path.join(project, '.github/workflows/build-apk.yml'), workflow(label));
-      await fs.writeFile(path.join(project, 'README.md'), `# KAYAN ${label} — independent GitHub APK project\n\nAndroid package: **${config.appId}**. App label: **${config.appName}**. This project opens only the ${variant} experience at the root route. No dependency on the other repository.\n\n## Compile on GitHub (no terminal required)\n\n1. Create a separate GitHub repository named kayan-${variant}.\n2. Extract this ZIP. Upload the CONTENTS of its kayan-${variant} folder into the repository root, not the ZIP itself or a nested folder. Include the hidden .github folder and .gitignore. Confirm .github/workflows/build-apk.yml, package.json, pnpm-lock.yaml, src, public, and capacitor.config.json appear in GitHub.\n3. Commit to main. Actions runs automatically; alternatively select Actions → Build KAYAN ${label} APK → Run workflow on the default branch. Enable Actions if prompted.\n4. Open the successful run and download KAYAN-${label}-Demo-APK under Artifacts. Extract app-debug.apk and install on your trusted test Android device. Do not bypass Play Protect.\n\nBoth projects use different package IDs and can be installed side by side. Updates may require uninstalling an earlier debug build if CI signing keys differ; this clears local preferences.\n\n## Included\n\nReact/TypeScript source, locked pnpm web dependencies, native foreground location plugins, real Leaflet/OpenStreetMap map, eagle launcher icon generation, Capacitor config, and a complete GitHub Actions debug APK workflow. Web source dependencies use a frozen lockfile; Android CLI/framework packaging tools resolve within Capacitor major 7 in an isolated tools directory. Node 22, Java 21 and Android SDK are set up by CI. No signing secrets or map API key are required.\n\n${driver ? 'First-launch fictional driver pre-registration, manual ride requests/trips, scripted chat/call, illustrative earnings and history.' : 'Passenger booking and registration previews, manual trip simulation and scripted chat/call.'}\n\nReal device location is opt-in, foreground-only and separate from simulated trips. No real dispatch, payments, uploads or approval. Subscription pricing and rewards remain unfinalized. See GPS_ANDROID_TESTING.md for privacy and MuMu/physical-device checks.\n\n## Verification and limits\n\nThese archives are generated from the current application source. Their standalone web builds are checked during export. An APK is produced only after the GitHub workflow succeeds. Native compilation, launcher rendering, GPS permissions and physical GPS accuracy still require device testing; emulator location does not prove physical accuracy. Debug builds are not signed store releases.\n`);
+      await fs.writeFile(path.join(project, '.github/workflows/build-apk.yml'), workflow(label, driver));
+      const projectReadme = `# KAYAN ${label} — independent GitHub APK project
+
+Android package: **${config.appId}**. App label: **${config.appName}**. This project opens only the ${variant} experience at the root route. No dependency on the other repository.
+
+## Compile on GitHub (no terminal required)
+
+1. Create a separate GitHub repository named kayan-${variant}.
+2. Extract this ZIP. Upload the CONTENTS of its kayan-${variant} folder into the repository root, not the ZIP itself or a nested folder. Include the hidden .github folder and .gitignore. Confirm .github/workflows/build-apk.yml, package.json, pnpm-lock.yaml, src, public, and capacitor.config.json appear in GitHub.
+3. Commit to main. Actions runs automatically; alternatively select Actions → Build KAYAN ${label} APK → Run workflow on the default branch. Enable Actions if prompted.
+4. Open the successful run and download KAYAN-${label}-Demo-APK under Artifacts. Extract app-debug.apk and install on your trusted test Android device. Do not bypass Play Protect.
+
+Both projects use different package IDs and can be installed side by side. Updates may require uninstalling an earlier debug build if CI signing keys differ; this clears local preferences.
+
+## Included
+
+React/TypeScript source, locked pnpm web dependencies, native foreground location plugins, ${driver ? 'native Google Maps Android SDK for the driver APK and Google Maps JavaScript API for browser previews' : 'Leaflet/OpenStreetMap map'}, eagle launcher icon generation, Capacitor config, and a complete GitHub Actions debug APK workflow. Web source dependencies use a frozen lockfile; Android CLI/framework packaging tools resolve within Capacitor major 7 in an isolated tools directory. Node 22, Java 21 and Android SDK are set up by CI. The driver APK requires restricted Google Maps keys and a stable debug keystore secret; the passenger build does not.
+
+${driver ? 'First-launch fictional driver pre-registration, automatic foreground device-location requests when the map opens, native Google Maps Android SDK map with fastest-available driving routes to accepted ride destinations, manual ride requests/trips, scripted chat/call, illustrative earnings and history. Enable Maps SDK for Android, Maps JavaScript API and Routes API with billing. Add repository Actions secrets GOOGLE_MAPS_ANDROID_API_KEY (Android app-restricted to com.kayan.driver.demo and its signing certificate), GOOGLE_MAPS_API_KEY (website-restricted for Maps JavaScript API and Routes API, including https://localhost/*), and ANDROID_DEBUG_KEYSTORE_BASE64 (the matching debug keystore in base64; create it with the standard alias and password documented in ANDROID_DRIVER_DEMO.md). For local development, set VITE_GOOGLE_MAPS_ANDROID_API_KEY and VITE_GOOGLE_MAPS_API_KEY in the environment or an ignored .env.local file; GOOGLE_MAPS_ANDROID_API_KEY must also be present while preparing the Android manifest.' : 'Passenger booking and registration previews, manual trip simulation and scripted chat/call. Passenger device location remains opt-in and foreground-only.'}
+
+Device location is separate from simulated trips. No real dispatch, payments, uploads or approval. Subscription pricing and rewards remain unfinalized. See GPS_ANDROID_TESTING.md for privacy and MuMu/physical-device checks.
+
+## Verification and limits
+
+These archives are generated from the current application source. Their standalone web builds are checked during export. An APK is produced only after the GitHub workflow succeeds. Native compilation, launcher rendering, GPS permissions and physical GPS accuracy still require device testing; emulator location does not prove physical accuracy. Debug builds are not signed store releases.
+`;
+      await fs.writeFile(path.join(project, 'README.md'), projectReadme);
       if (verify) {
         await fs.symlink(path.resolve('node_modules'), path.join(project, 'node_modules'), process.platform === 'win32' ? 'junction' : 'dir');
         execFileSync(process.execPath, [path.resolve('node_modules/vite/bin/vite.js'), 'build'], { cwd: project, stdio: 'pipe', timeout: 120000 });

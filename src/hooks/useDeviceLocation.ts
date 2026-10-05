@@ -7,13 +7,13 @@ function locationError(error: unknown) {
   const code = typeof error === 'object' && error !== null && 'code' in error ? String(error.code) : '';
   if (code === '1' || code === 'OS-PLUG-GLOC-0003') return 'Location permission denied. Allow location in Android App settings (or browser site settings), then retry.';
   if (['OS-PLUG-GLOC-0007', 'OS-PLUG-GLOC-0009', 'OS-PLUG-GLOC-0016'].includes(code)) return 'Location services are off or unavailable. Enable Android Location and Google Location Accuracy, then retry.';
-  if (code === '3' || code === 'OS-PLUG-GLOC-0010') return 'No fresh fix yet. Move outdoors, check location services, or configure MuMu’s simulated location. Retry if needed.';
+  if (code === '3' || code === 'OS-PLUG-GLOC-0010') return 'GPS has not returned a fix yet. Keep the map open, enable device Location, and move outdoors for an initial fix. Tracking will continue automatically.';
   if (['OS-PLUG-GLOC-0014', 'OS-PLUG-GLOC-0015'].includes(code)) return 'Google Play Services needs attention. Enable or update it on this Android device, then retry.';
   return 'Unable to read device location. Check location permission, Android Location, and Google Play Services, then retry. Browser previews must allow geolocation in this frame.';
 }
 
-export default function useDeviceLocation() {
-  const [enabled, setEnabled] = useState(false);
+export default function useDeviceLocation({ autoStart = false }: { autoStart?: boolean } = {}) {
+  const [enabled, setEnabled] = useState(autoStart);
   const [visible, setVisible] = useState(document.visibilityState === 'visible');
   const [appActive, setAppActive] = useState(!Capacitor.isNativePlatform());
   const [position, setPosition] = useState<Position | null>(null);
@@ -22,7 +22,7 @@ export default function useDeviceLocation() {
   const [waiting, setWaiting] = useState(false);
   const [now, setNow] = useState(Date.now());
   const [attempt, setAttempt] = useState(0);
-  const mayRequest = useRef(false);
+  const mayRequest = useRef(autoStart);
   const foreground = visible && appActive;
 
   useEffect(() => {
@@ -70,11 +70,17 @@ export default function useDeviceLocation() {
         }
         if (disposed) return;
         mayRequest.current = false;
-        const id = await Geolocation.watchPosition({ enableHighAccuracy: true, maximumAge: 0, timeout: 15000, minimumUpdateInterval: 5000 }, (fix, err) => {
+        const id = await Geolocation.watchPosition({
+          enableHighAccuracy: true,
+          maximumAge: 0,
+          timeout: Capacitor.isNativePlatform() ? 15000 : 60000,
+          minimumUpdateInterval: 5000,
+        }, (fix, err) => {
           if (disposed) return;
           if (err) {
-            setError(locationError(err));
             const code = String(err.code || '');
+            setWaiting(false);
+            setError(locationError(err));
             if (code === '1' || code === 'OS-PLUG-GLOC-0003') { setPermission('Denied'); setEnabled(false); setPosition(null); }
             return;
           }

@@ -26,7 +26,51 @@ First launch asks for fictional contact and vehicle information and sample docum
 
 Light/Dark/System selection uses the independent `kayan-driver-theme` device preference. The passenger theme key is unchanged. **Restart pre-registration** clears the introduction flag and session data without changing the theme.
 
-All requests are locally generated. Pickup and trip progression are manual. The map is now a real Leaflet/OpenStreetMap map with optional foreground device location, an accuracy circle and fix age. Device location is separate from trip simulation. Chat replies are scripted and call connection is visual only (no audio, telephone link or microphone). See [GPS_ANDROID_TESTING.md](GPS_ANDROID_TESTING.md) for permissions, privacy and GPS acceptance checks. Completed fares form illustrative gross totals; actual payable balance is zero. No real dispatch, payments, wallet, payouts, uploads, document review, or approval occur. Subscription pricing and rewards remain **unfinalized**; the demo defines no plans, prices, or rewards.
+All requests are locally generated. Pickup and trip progression are manual. The driver map uses Google Maps and automatically requests foreground device location when opened. Location is separate from trip simulation; system permission is required. Chat replies are scripted and call connection is visual only (no audio, telephone link or microphone). See [GPS_ANDROID_TESTING.md](GPS_ANDROID_TESTING.md) for permissions, privacy and GPS acceptance checks. Completed fares form illustrative gross totals; actual payable balance is zero. No real dispatch, payments, wallet, payouts, uploads, document review, or approval occur. Subscription pricing and rewards remain **unfinalized**; the demo defines no plans, prices, or rewards.
+
+## Native Google Maps API keys
+
+The Android driver APK displays the **native Google Maps Android SDK**, not a map inside an HTML/JavaScript map widget. Browser previews continue to use Google Maps JavaScript. The native map and browser/route requests need distinct keys because Google requires different application restrictions. Enable billing on the same Google Cloud project and enable:
+
+- **Maps SDK for Android** — native Android map rendering.
+- **Maps JavaScript API** and **Routes API** — browser preview and traffic-aware driving-route calculation.
+
+After a driver accepts a demo request, Routes API returns alternative routes from the current device fix to the ride destination; the shortest traffic-aware duration is drawn on the native map.
+
+Create two restricted keys in the same Cloud project:
+
+1. **Android SDK key:** API restriction = **Maps SDK for Android** only. Application restriction = Android apps; package name `com.kayan.driver.demo` and SHA-1 signing certificate fingerprint for the debug certificate used by the APK. Do not use a website-restricted key for this SDK.
+2. **Web and Routes key:** API restrictions = **Maps JavaScript API** and **Routes API** only. Application restriction = Websites; allow `https://localhost/*` for the Capacitor Android WebView, and the actual localhost origin/port used for browser preview (for example `http://localhost:8081/*`). This key is embedded in the web bundle and is not a server-side secret; keep the restrictions in place.
+
+### GitHub APK build secrets
+
+Add these repository Actions secrets:
+
+- `GOOGLE_MAPS_ANDROID_API_KEY` — Android SDK-restricted key.
+- `GOOGLE_MAPS_API_KEY` — website-restricted Maps JavaScript/Routes key.
+- `ANDROID_DEBUG_KEYSTORE_BASE64` — a stable debug signing keystore encoded as one-line base64. The Android key's package/SHA-1 restriction must match this keystore; ephemeral CI signing keys would cause the native map to be rejected.
+
+Create a dedicated debug keystore locally and keep the file private (do not commit it):
+
+```sh
+keytool -genkeypair -v -keystore kayan-driver-debug.keystore \
+  -storepass android -alias AndroidDebugKey -keypass android \
+  -dname "CN=KAYAN Driver Debug,O=KAYAN,C=ZM" \
+  -keyalg RSA -keysize 2048 -validity 10000
+keytool -list -v -keystore kayan-driver-debug.keystore \
+  -storepass android -alias AndroidDebugKey
+```
+
+Use the displayed SHA-1 fingerprint in the Android key restriction. Add the base64-encoded keystore as `ANDROID_DEBUG_KEYSTORE_BASE64` (Linux: `base64 -w 0 kayan-driver-debug.keystore`; macOS: `base64 < kayan-driver-debug.keystore | tr -d '\n'`). The workflow installs it as the stable CI debug signer. The keystore uses the standard debug alias/password expected by Android's debug build configuration; store it only in a trusted secret manager.
+
+### Local build and browser preview
+
+- Set `VITE_GOOGLE_MAPS_ANDROID_API_KEY` and `VITE_GOOGLE_MAPS_API_KEY` for `npm run build:driver`. They can be placed in the ignored `.env.driver.local` file; never commit keys.
+- Also set `GOOGLE_MAPS_ANDROID_API_KEY` in the shell when running `node src/android/prepare-android.mjs`, so the Android manifest receives the native key.
+- For a locally compiled APK restricted to the CI certificate, securely install/use the same debug keystore locally. Otherwise register the local debug certificate's SHA-1 as an additional allowed Android app fingerprint.
+- Browser preview uses only `VITE_GOOGLE_MAPS_API_KEY`; allow the exact preview origin and port in its website restrictions.
+
+The passenger app continues to use OpenStreetMap and does not need this key.
 
 ## Device acceptance checklist
 
@@ -38,6 +82,7 @@ All requests are locally generated. Pickup and trip progression are manual. The 
 - Test chat, call connection/end, trip cancellation, earnings and history. Only completed trips contribute fares.
 - Confirm the online toggle is locked during a trip and offline removes pending requests.
 - Restart pre-registration and verify all session data is cleared.
-- Check narrow screens, keyboard interaction, Android back behavior, and no payment/upload prompts. Foreground location permission should appear only after explicitly enabling device location. Confirm eagle launcher icons on both apps.
+- Check narrow screens, keyboard interaction, Android back behavior, and no payment/upload prompts. Opening the driver map automatically requests foreground location permission; confirm denying permission shows an actionable error and no fabricated position. Confirm eagle launcher icons on both apps.
+- On Android, confirm the Google map is rendered by the native SDK, the device marker updates, and an accepted demo ride draws its computed route. In a browser preview, confirm the JavaScript map still loads and the route is visible.
 
 Google Fonts are optional external presentation resources; app simulation does not need a backend. Without network access, system font fallbacks are used. Production dispatch, approval, subscriptions, payments, signing, and store publication are outside this demo workflow.
