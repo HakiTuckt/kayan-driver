@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Set up secure KAYAN driver storage</title>
+    <style>
+      :root { color-scheme: light; font-family: system-ui, sans-serif; color: #183e47; background: #f5fbfc; }
+      body { max-width: 48rem; margin: 2rem auto; padding: 0 1rem 3rem; }
+      main { padding: 1.5rem; border: 1px solid #c8dfe0; border-radius: 1rem; background: white; }
+      li { margin: .9rem 0; line-height: 1.55; }
+      button, .download { display: inline-block; border: 0; border-radius: .6rem; padding: .8rem 1.1rem; background: #147d68; color: white; font: inherit; font-weight: 700; text-decoration: none; cursor: pointer; }
+      .secondary { margin-left: .5rem; background: #e7f2f0; color: #183e47; }
+      .note { border-left: 4px solid #28a47e; padding: .7rem 1rem; background: #eff8f4; line-height: 1.55; }
+      #status { min-height: 1.5rem; color: #147d68; font-weight: 650; }
+      a { color: #147d68; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Set up secure driver data storage</h1>
+      <p>This owner-only setup creates private driver profile, vehicle and document storage in Supabase. It never uploads documents. Driver-app users do not configure database credentials.</p>
+
+      <p class="note"><strong>Use this only in the KAYAN project you created.</strong> The setup SQL contains database instructions, not passwords or secret keys.</p>
+
+      <h2>Follow these steps</h2>
+      <ol>
+        <li>Sign in to Supabase and open your KAYAN project.</li>
+        <li>In the left menu, open <strong>SQL Editor</strong>, then click <strong>New query</strong>.</li>
+        <li>For the first setup only, copy the private driver-data SQL, paste it into Supabase, and click <strong>Run</strong>. If you already ran it successfully, do not run it again.</li>
+        <li>In Supabase, open <strong>Authentication → Sign In / Providers</strong> and enable <strong>Anonymous sign-ins</strong> and <strong>Phone</strong>. Phone OTP will not work until the maintainer deploys and configures the Yoola SMS hook.</li>
+        <li>In <strong>Table Editor</strong>, confirm there are tables named <code>driver_profiles</code>, <code>driver_vehicles</code>, and <code>driver_documents</code>. In <strong>Storage</strong>, confirm <code>driver-documents</code> is private.</li>
+      </ol>
+
+      <p><button id="copy" type="button">Copy setup SQL</button><a class="download secondary" href="/downloads/kayan-supabase-driver-setup.sql" download>Download SQL file</a></p>
+      <p id="status" role="status" aria-live="polite"></p>
+
+      <p><strong>If Supabase shows an error:</strong> do not repeatedly run the query. Copy the error message (but not any keys or passwords) and send it to me so I can help safely.</p>
+      <p>After the initial database migration succeeds, the KAYAN app maintainer configures the project URL and public/publishable key in the app build settings. The Driver app itself never asks drivers to provide these values.</p>
+      <p class="note">A demo account can be recovered with its verified phone only after Supabase Phone authentication and the Yoola SMS hook are configured and tested. Do not enter real driver details or upload real identity documents. This demo saves only fictional profile and vehicle data.</p>
+    </main>
+    <script>
+      const status = document.querySelector('#status');
+      document.querySelector('#copy').addEventListener('click', async () => {
+        try {
+          const response = await fetch('/downloads/kayan-supabase-driver-setup.sql');
+          if (!response.ok) throw new Error(`Could not load setup SQL (${response.status}).`);
+          await navigator.clipboard.writeText(await response.text());
+          status.textContent = 'Setup SQL copied. Switch back to Supabase and paste it into the new query.';
+        } catch (error) {
+          status.textContent = error instanceof Error ? error.message : 'Could not copy the setup SQL. Use Download SQL file instead.';
+        }
+      });
+    </script>
+  </body>
+</html>

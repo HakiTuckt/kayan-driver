@@ -18,15 +18,17 @@
 
 The isolated runner builds driver mode, replaces the runner’s Capacitor config with the driver config, generates Android, and compiles a debug APK. It does not change the committed passenger configuration or the existing passenger workflow. Node 22, Java 21, Android SDK, and Capacitor 7 follow the passenger packaging setup. This is a debug/test build, not a signed store release. No signing credentials are needed. Artifacts expire after 14 days.
 
-**No Android APK has been compiled or device-tested in this editing session.** The workflow must complete in GitHub to produce the artifact. Do not describe the demo as Android-validated until that run and device checks pass.
+**A local debug APK has been compiled and its archive and signing certificate validated, but it has not been installed or device-tested.** GitHub Actions must complete separately to produce the downloadable workflow artifact. Do not describe the demo as device-validated until the APK has been installed and the checks below pass.
+
+The checked-in `kayan-driver-ui-test.apk` predates the phone OTP changes. Build a fresh artifact after configuring and testing the Supabase Send SMS hook; the checked-in APK cannot validate phone registration or sign-in.
 
 ## Demo behavior and data
 
-First launch asks for fictional contact and vehicle information and sample document selection. No file chooser, camera, upload, account, application submission, or driver approval is connected. Finishing the introduction saves only `kayan-driver-intro=complete` on the device. Personal details stay in page memory; subsequent launches show a generic demo driver. Trip history, chat, earnings, and availability reset on reload; online starts off.
+First launch asks for driver contact and vehicle information and verifies the phone with an SMS OTP before requiring a driving licence, national registration card, vehicle registration, and roadworthiness certificate file (PDF/JPG/PNG, maximum 10 MiB each). The verified phone is linked to the current Supabase identity, preserving its private profile and document storage. Returning drivers can sign in with phone OTP on another device. This is passwordless phone authentication, not true 2FA; the test build has no staff review or approval flow. Do not upload genuine identity documents. Trip history, chat, earnings, and availability reset on reload; online starts off.
 
 Light/Dark/System selection uses the independent `kayan-driver-theme` device preference. The passenger theme key is unchanged. **Restart pre-registration** clears the introduction flag and session data without changing the theme.
 
-All requests are locally generated. Pickup and trip progression are manual. The driver map uses Google Maps and automatically requests foreground device location when opened. Location is separate from trip simulation; system permission is required. Chat replies are scripted and call connection is visual only (no audio, telephone link or microphone). See [GPS_ANDROID_TESTING.md](GPS_ANDROID_TESTING.md) for permissions, privacy and GPS acceptance checks. Completed fares form illustrative gross totals; actual payable balance is zero. No real dispatch, payments, wallet, payouts, uploads, document review, or approval occur. Subscription pricing and rewards remain **unfinalized**; the demo defines no plans, prices, or rewards.
+All requests are locally generated. Pickup and trip progression are manual. The driver map uses Google Maps and automatically requests foreground device location when opened. Location is separate from trip simulation; system permission is required. Chat replies are scripted and call connection is visual only (no audio, telephone link or microphone). See [GPS_ANDROID_TESTING.md](GPS_ANDROID_TESTING.md) for permissions, privacy and GPS acceptance checks. Completed fares form illustrative gross totals; actual payable balance is zero. No real dispatch, payments, wallet, payouts, staff document review, or driver approval occur. Subscription pricing and rewards remain **unfinalized**; the demo defines no plans, prices, or rewards.
 
 ## Native Google Maps API keys
 
@@ -75,14 +77,14 @@ The passenger app continues to use OpenStreetMap and does not need this key.
 ## Device acceptance checklist
 
 - Install passenger and driver APKs together and confirm their distinct labels/package IDs.
-- First launch: complete all three steps with fictional inputs; sample selection never opens device files.
-- Relaunch: introduction is skipped with a generic profile; no personal details or trips persist.
+- First launch: complete the profile and vehicle questions, then select four test documents; confirm each file step opens the Android file picker and has an explicit required state.
+- Relaunch: a profile with all four stored document records opens the demo dashboard. A saved profile missing any required document resumes at the document-upload steps with its profile data preserved.
 - Test Light, Dark, and System, including Android system appearance changes.
 - Go online; decline, generate another request, accept, and advance pickup/trip/drop-off.
 - Test chat, call connection/end, trip cancellation, earnings and history. Only completed trips contribute fares.
 - Confirm the online toggle is locked during a trip and offline removes pending requests.
-- Restart pre-registration and verify all session data is cleared.
-- Check narrow screens, keyboard interaction, Android back behavior, and no payment/upload prompts. Opening the driver map automatically requests foreground location permission; confirm denying permission shows an actionable error and no fabricated position. Confirm eagle launcher icons on both apps.
+- Restart pre-registration and verify the session UI state is cleared.
+- Check narrow screens, keyboard interaction, Android back behavior, and no payment prompts. Opening the driver map automatically requests foreground location permission; confirm denying permission shows an actionable error and no fabricated position. Confirm eagle launcher icons on both apps.
 - On Android, confirm the Google map is rendered by the native SDK, the device marker updates, and an accepted demo ride draws its computed route. In a browser preview, confirm the JavaScript map still loads and the route is visible.
 
 Google Fonts are optional external presentation resources; app simulation does not need a backend. Without network access, system font fallbacks are used. Production dispatch, approval, subscriptions, payments, signing, and store publication are outside this demo workflow.

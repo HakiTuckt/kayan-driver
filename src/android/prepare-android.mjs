@@ -1,9 +1,11 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import sharp from 'sharp';
+import { loadEnv } from 'vite';
 
 const root = 'android/app/src/main';
 const manifestPath = path.join(root, 'AndroidManifest.xml');
+const localBuildEnv = loadEnv('driver', process.cwd(), 'GOOGLE_MAPS_ANDROID_API_KEY');
 let manifest = await fs.readFile(manifestPath, 'utf8');
 const permissions = ['ACCESS_COARSE_LOCATION', 'ACCESS_FINE_LOCATION'];
 let declarations = '';
@@ -13,7 +15,7 @@ for (const permission of permissions) {
 if (!manifest.includes('android.hardware.location.gps')) declarations += '    <uses-feature android:name="android.hardware.location.gps" android:required="false" />\n';
 manifest = manifest.replace(/(<manifest\b[^>]*>)/, `$1\n${declarations}`);
 if (manifest.includes('android.permission.ACCESS_BACKGROUND_LOCATION')) throw new Error('Background location is outside the demo permission scope');
-const androidMapsKey = process.env.GOOGLE_MAPS_ANDROID_API_KEY?.trim();
+const androidMapsKey = (process.env.GOOGLE_MAPS_ANDROID_API_KEY || localBuildEnv.GOOGLE_MAPS_ANDROID_API_KEY)?.trim();
 if (androidMapsKey) {
   const xmlKey = androidMapsKey.replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
   const metadata = `        <meta-data android:name="com.google.android.geo.API_KEY" android:value="${xmlKey}" />`;

@@ -16,7 +16,7 @@ const driverBuild = import.meta.env.VITE_APP_VARIANT === 'driver';
 function AppRoutes() {
   const { pathname } = useLocation();
   const themeKey = driverBuild || pathname === '/driver' ? 'kayan-driver-theme' : 'kayan-theme';
-  return <ThemeProvider key={themeKey} attribute="class" defaultTheme="system" enableSystem storageKey={themeKey}>
+  return <ThemeProvider key={themeKey} attribute="class" defaultTheme={driverBuild || pathname === '/driver' ? 'light' : 'system'} enableSystem storageKey={themeKey}>
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <Toaster />

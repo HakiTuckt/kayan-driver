@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { GoogleMap as CapacitorGoogleMap, LatLngBounds } from '@capacitor/google-maps';
-import { LocateFixed } from 'lucide-react';
+import { LocateFixed, MapPinned } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import useDeviceLocation from '@/hooks/useDeviceLocation';
 
@@ -13,20 +13,39 @@ declare global {
 
 let mapsApiPromise: Promise<void> | null = null;
 
-const kayanMapStyles: google.maps.MapTypeStyle[] = [
-  { elementType: 'geometry', stylers: [{ color: '#102820' }] },
-  { elementType: 'labels.text.fill', stylers: [{ color: '#c4cec4' }] },
-  { elementType: 'labels.text.stroke', stylers: [{ color: '#102820' }] },
-  { featureType: 'landscape', elementType: 'geometry', stylers: [{ color: '#0b211b' }] },
-  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#071a16' }] },
-  { featureType: 'poi', elementType: 'geometry', stylers: [{ color: '#142d24' }] },
-  { featureType: 'poi', elementType: 'labels.text.fill', stylers: [{ color: '#8b9b8e' }] },
-  { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#263c32' }] },
-  { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#34483c' }] },
-  { featureType: 'road', elementType: 'labels.text.fill', stylers: [{ color: '#c7c3a8' }] },
-  { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#726f55' }] },
-  { featureType: 'road.highway', elementType: 'geometry.stroke', stylers: [{ color: '#8c8768' }] },
-  { featureType: 'transit', elementType: 'geometry', stylers: [{ color: '#34483c' }] },
+const kayanLightMapStyles: google.maps.MapTypeStyle[] = [
+  { elementType: 'geometry', stylers: [{ color: '#edf5f1' }] },
+  { elementType: 'labels.text.fill', stylers: [{ color: '#42636a' }] },
+  { elementType: 'labels.text.stroke', stylers: [{ color: '#edf5f1' }] },
+  { featureType: 'administrative', elementType: 'geometry.stroke', stylers: [{ color: '#c3d9d0' }] },
+  { featureType: 'landscape', elementType: 'geometry', stylers: [{ color: '#e4efe8' }] },
+  { featureType: 'poi', elementType: 'geometry', stylers: [{ color: '#d8eade' }] },
+  { featureType: 'poi', elementType: 'labels.text.fill', stylers: [{ color: '#52776c' }] },
+  { featureType: 'poi.park', elementType: 'geometry', stylers: [{ color: '#c8e2d0' }] },
+  { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#ffffff' }] },
+  { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#d1e1db' }] },
+  { featureType: 'road', elementType: 'labels.text.fill', stylers: [{ color: '#42636a' }] },
+  { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#9dd6c2' }] },
+  { featureType: 'road.highway', elementType: 'geometry.stroke', stylers: [{ color: '#82c4ae' }] },
+  { featureType: 'transit', elementType: 'geometry', stylers: [{ color: '#b2d7cb' }] },
+  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#c2e2e8' }] },
+  { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#477986' }] },
+];
+
+const kayanDarkMapStyles: google.maps.MapTypeStyle[] = [
+  { elementType: 'geometry', stylers: [{ color: '#183b43' }] },
+  { elementType: 'labels.text.fill', stylers: [{ color: '#d1e5e6' }] },
+  { elementType: 'labels.text.stroke', stylers: [{ color: '#183b43' }] },
+  { featureType: 'landscape', elementType: 'geometry', stylers: [{ color: '#102c34' }] },
+  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#0c2735' }] },
+  { featureType: 'poi', elementType: 'geometry', stylers: [{ color: '#1b4147' }] },
+  { featureType: 'poi', elementType: 'labels.text.fill', stylers: [{ color: '#a7c9c8' }] },
+  { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#31545a' }] },
+  { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#41666c' }] },
+  { featureType: 'road', elementType: 'labels.text.fill', stylers: [{ color: '#c6e0dc' }] },
+  { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#527c7c' }] },
+  { featureType: 'road.highway', elementType: 'geometry.stroke', stylers: [{ color: '#65918e' }] },
+  { featureType: 'transit', elementType: 'geometry', stylers: [{ color: '#41666c' }] },
 ];
 
 function loadGoogleMapsApi(apiKey: string) {
@@ -93,7 +112,7 @@ function BrowserGoogleKayanMap({ hasRoute, destination, stage = null, immersive 
       const instance = new google.maps.Map(container.current, {
         center: { lat: -15.4067, lng: 28.2871 },
         zoom: 13,
-        styles: [],
+        styles: isDark ? kayanDarkMapStyles : kayanLightMapStyles,
         gestureHandling: 'cooperative',
         mapTypeControl: false,
         streetViewControl: false,
@@ -126,7 +145,7 @@ function BrowserGoogleKayanMap({ hasRoute, destination, stage = null, immersive 
   }, [apiKey]);
 
   useEffect(() => {
-    map.current?.setOptions({ styles: isDark ? kayanMapStyles : [] });
+    map.current?.setOptions({ styles: isDark ? kayanDarkMapStyles : kayanLightMapStyles });
   }, [isDark, mapReady]);
 
   useEffect(() => {
@@ -139,7 +158,7 @@ function BrowserGoogleKayanMap({ hasRoute, destination, stage = null, immersive 
     }
 
     const point = { lat: position.coords.latitude, lng: position.coords.longitude };
-    const color = fresh ? '#d87932' : '#64748b';
+    const color = fresh ? '#2c87ac' : '#718b95';
     const icon: google.maps.Symbol = {
       path: google.maps.SymbolPath.CIRCLE,
       scale: 8,
@@ -206,7 +225,7 @@ function BrowserGoogleKayanMap({ hasRoute, destination, stage = null, immersive 
       });
       if (!fastest.path?.length) throw new Error('The route response did not contain a path.');
       routePolylines.current = fastest.createPolylines({
-        polylineOptions: { strokeColor: '#d87932', strokeOpacity: 0.9, strokeWeight: 6 },
+        polylineOptions: { strokeColor: isDark ? '#72d8c0' : '#168d79', strokeOpacity: 0.96, strokeWeight: 7 },
       });
       routePolylines.current.forEach(polyline => polyline.setMap(instance));
       if (fastest.viewport) instance.fitBounds(fastest.viewport);
@@ -219,7 +238,7 @@ function BrowserGoogleKayanMap({ hasRoute, destination, stage = null, immersive 
         : 'Could not calculate the route. Check Routes API access, billing, and this key’s restrictions.');
       console.error('Google Maps route request failed:', error);
     });
-  }, [destination, routeRequested, fresh, position, mapReady, routeAttempt]);
+  }, [destination, routeRequested, fresh, position, mapReady, routeAttempt, isDark]);
 
   const center = () => {
     follow.current = true;
@@ -235,12 +254,16 @@ function BrowserGoogleKayanMap({ hasRoute, destination, stage = null, immersive 
   const routeFailed = routeStatus.startsWith('Routes API denied') || routeStatus.startsWith('Could not calculate');
   const gpsLabel = fresh ? 'GPS live' : location.error ? 'GPS unavailable' : location.waiting ? 'Locating…' : 'GPS ready';
 
-  return <section className={`relative isolate flex h-full min-h-0 flex-col overflow-hidden bg-slate-100 dark:bg-[#0b211b] ${immersive ? '' : 'min-h-[390px] rounded-3xl border bg-card shadow-sm md:min-h-[560px]'}`}>
+  return <section className={`relative isolate flex h-full min-h-0 flex-col overflow-hidden bg-[var(--map-base)] dark:bg-[#0b211b] ${immersive ? '' : 'min-h-[390px] rounded-3xl border bg-card shadow-sm md:min-h-[560px]'}`}>
     {!immersive && <div className="flex flex-wrap items-center justify-between gap-3 border-b bg-card px-4 py-3"><div><p className="text-sm font-bold">Driver map</p><p className="mt-1 text-[10px] text-muted-foreground">Device location · Lusaka</p></div><span className={`inline-flex items-center gap-2 rounded-full bg-secondary px-3 py-1.5 text-[10px] font-semibold ${fresh ? 'text-foreground' : 'text-muted-foreground'}`}><span className={`h-1.5 w-1.5 rounded-full ${fresh ? 'animate-pulse bg-primary' : location.error ? 'bg-destructive' : 'bg-muted-foreground'}`}/>{gpsLabel}</span></div>}
-    <div className={`relative isolate min-h-0 flex-1 overflow-hidden bg-slate-100 dark:bg-[#0b211b] ${immersive ? '' : 'h-[36svh] min-h-[250px] max-h-[340px] md:h-auto md:min-h-[390px] md:max-h-none'}`}>
+    <div className={`relative isolate min-h-0 flex-1 overflow-hidden bg-[var(--map-base)] dark:bg-[#0b211b] ${immersive ? '' : 'h-[36svh] min-h-[250px] max-h-[340px] md:h-auto md:min-h-[390px] md:max-h-none'}`}>
     <div ref={container} aria-label="Interactive Google map" className="absolute inset-0 z-0"/>
+    <div className="map-status-card pointer-events-none absolute left-3 top-3 z-[400] flex items-center gap-2.5 rounded-2xl px-3 py-2.5 sm:left-4 sm:top-4">
+      <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary"><MapPinned size={18}/></span>
+      <span><span className="block text-[9px] font-extrabold tracking-[.16em] text-foreground">KAYAN DRIVER</span><span className="mt-1 flex items-center gap-1.5 text-[10px] font-medium text-muted-foreground"><span className={`h-1.5 w-1.5 rounded-full ${fresh ? 'animate-pulse bg-emerald-500' : location.error ? 'bg-destructive' : 'bg-amber-500'}`}/>{fresh ? 'GPS fix active' : location.error ? 'GPS unavailable' : 'Waiting for GPS'}</span></span>
+    </div>
     <div className="pointer-events-none absolute right-3 top-3 z-[400] flex flex-col items-end gap-2 sm:right-4 sm:top-4">
-      <button className="map-control pointer-events-auto rounded-2xl" aria-label={position ? 'Center on device position' : 'Center on Lusaka default view'} onClick={center}><LocateFixed size={18}/></button>{position && !following && <button onClick={center} className="pointer-events-auto rounded-xl border bg-card px-3 py-2 text-[10px] font-bold text-foreground shadow-lg">Follow device</button>}
+      <button title="Center map on your location" className="map-control pointer-events-auto rounded-2xl" aria-label={position ? 'Center on device position' : 'Center on Lusaka default view'} onClick={center}><LocateFixed size={18}/></button>{position && !following && <button onClick={center} className="pointer-events-auto rounded-xl border bg-card px-3 py-2 text-[10px] font-bold text-foreground shadow-lg">Follow device</button>}
     </div>
     {(mapError || routeStatus || !apiKey) && <div className="absolute left-4 right-4 top-24 z-[400] flex items-center justify-between gap-3 rounded-2xl border bg-card/95 px-4 py-3 text-[11px] text-foreground shadow-xl backdrop-blur sm:left-6 sm:right-6"><span role={mapError || routeFailed || !apiKey ? 'alert' : 'status'} className="min-w-0">{mapError || (!apiKey ? 'Google Maps needs a configured Maps JavaScript API key.' : routeFailed ? 'Route unavailable · Check Routes API setup.' : routeStatus)}</span>{routeFailed && <button onClick={() => { lastRouteTarget.current = null; setRouteAttempt(attempt => attempt + 1); }} className="shrink-0 font-bold text-primary underline">Retry route</button>}</div>}
     {location.error && <div role="alert" className="absolute bottom-4 left-4 right-4 z-[400] rounded-2xl border border-white/15 bg-[var(--forest)]/95 p-4 text-xs leading-5 text-[var(--cream)] shadow-xl backdrop-blur sm:bottom-6 sm:left-6 sm:right-6">{location.error}<button onClick={location.start} className="ml-2 font-bold text-[#efac78] underline">Retry location</button></div>}
@@ -301,7 +324,7 @@ function NativeGoogleKayanMap({ hasRoute, destination, stage = null, immersive =
       config: {
         center: { lat: -15.4067, lng: 28.2871 },
         zoom: 13,
-        styles: isDark ? kayanMapStyles : [],
+        styles: isDark ? kayanDarkMapStyles : kayanLightMapStyles,
       },
     }).then(async instance => {
       if (disposed) {
@@ -422,7 +445,7 @@ function NativeGoogleKayanMap({ hasRoute, destination, stage = null, immersive =
       if (!path.length) throw new Error('The route response did not include a path.');
       routeIds.current = await instance.addPolylines([{
         path,
-        strokeColor: '#d87932',
+        strokeColor: '#2c87ac',
         strokeOpacity: 0.9,
         strokeWeight: 6,
       }]);
