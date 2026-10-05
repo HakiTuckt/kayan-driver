@@ -53,11 +53,13 @@ export default function DriverRegistration({
   const [saveError, setSaveError] = useState('');
   const documentStep = step >= profileSteps.length && step < profileSteps.length + documents.length;
   const consentStep = step === profileSteps.length + documents.length;
-  const totalSteps = profileSteps.length + documents.length + 1;
-  const progress = ((step + 1) / totalSteps) * 100;
   const currentProfileStep = profileSteps[step];
   const currentDocument = documentStep ? documents[step - profileSteps.length] : null;
   const phoneStep = currentProfileStep?.key === 'phone';
+  const phoneVerificationStep = phoneStep && phoneCodeSent && !phoneVerified;
+  const totalSteps = profileSteps.length + documents.length + 2;
+  const progressStep = step + 1 + (step > 1 ? 1 : 0) + (phoneVerificationStep ? 1 : 0);
+  const progress = (progressStep / totalSteps) * 100;
 
   const sendPhoneCode = async () => {
     setPhoneError('');
@@ -117,6 +119,16 @@ export default function DriverRegistration({
     }
   };
 
+  const goBack = () => {
+    if (phoneVerificationStep) {
+      setPhoneCodeSent(false);
+      setPhoneCode('');
+      setPhoneError('');
+      return;
+    }
+    setStep(current => current - 1);
+  };
+
   const selectDocument = (type: DriverDocumentType, file?: File) => {
     setDocumentError('');
     if (!file) return;
@@ -137,9 +149,9 @@ export default function DriverRegistration({
     <div className="mb-6">
       <div className="mb-3 flex items-center justify-between gap-3">
         <span className="text-xs font-bold uppercase tracking-[.16em] text-primary">Driver pre-registration · demo</span>
-        <span className="shrink-0 text-xs text-muted-foreground">Step {step + 1} of {totalSteps}</span>
+        <span className="shrink-0 text-xs text-muted-foreground">Step {progressStep} of {totalSteps}</span>
       </div>
-      <div role="progressbar" aria-label="Pre-registration progress" aria-valuemin={0} aria-valuemax={totalSteps} aria-valuenow={step + 1} className="h-1.5 overflow-hidden rounded-full bg-secondary">
+      <div role="progressbar" aria-label="Pre-registration progress" aria-valuemin={0} aria-valuemax={totalSteps} aria-valuenow={progressStep} className="h-1.5 overflow-hidden rounded-full bg-secondary">
         <div className="h-full rounded-full bg-primary transition-[width]" style={{ width: `${progress}%` }}/>
       </div>
     </div>
@@ -225,7 +237,7 @@ export default function DriverRegistration({
         </label>}
 
         <div className="mt-8 flex gap-3">
-          {step > 0 && <Button type="button" variant="outline" className="h-12 rounded-xl px-4" onClick={() => setStep(current => current - 1)}><ArrowLeft size={16} className="mr-2"/>Back</Button>}
+          {step > 0 && <Button type="button" variant="outline" className="h-12 rounded-xl px-4" onClick={goBack}><ArrowLeft size={16} className="mr-2"/>Back</Button>}
           <Button type="submit" disabled={saving || phoneBusy || (!!currentDocument && !uploads[currentDocument.type])} className="kayan-action flex-1">
             {saving ? 'Submitting application…' : phoneBusy ? phoneCodeSent ? 'Verifying code…' : 'Sending code…' : phoneStep && !phoneVerified ? phoneCodeSent ? 'Verify & continue' : 'Send SMS code' : consentStep ? 'Submit application' : 'Continue'}{!saving && !phoneBusy && <ArrowRight size={17} className="ml-2"/>}
           </Button>

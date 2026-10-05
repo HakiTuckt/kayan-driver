@@ -24,7 +24,7 @@ The checked-in `kayan-driver-ui-test.apk` predates the phone OTP changes. Build 
 
 ## Demo behavior and data
 
-First launch asks for driver contact and vehicle information and verifies the phone with an SMS OTP before requiring a driving licence, national registration card, vehicle registration, and roadworthiness certificate file (PDF/JPG/PNG, maximum 10 MiB each). The verified phone is linked to the current Supabase identity, preserving its private profile and document storage. Returning drivers can sign in with phone OTP on another device. This is passwordless phone authentication, not true 2FA; the test build has no staff review or approval flow. Do not upload genuine identity documents. Trip history, chat, earnings, and availability reset on reload; online starts off.
+First launch asks for driver contact and vehicle information, then presents SMS code verification as its own registration progress step before requiring a driving licence, national registration card, vehicle registration, and roadworthiness certificate file (PDF/JPG/PNG, maximum 10 MiB each). Back from code entry returns to the phone field. The verified phone is linked to the current Supabase identity, preserving its private profile and document storage. Returning drivers can sign in with phone OTP on another device. This is passwordless phone authentication, not true 2FA; the test build has no staff review or approval flow. Do not upload genuine identity documents. Trip history, chat, earnings, and availability reset on reload; online starts off.
 
 Light/Dark/System selection uses the independent `kayan-driver-theme` device preference. The passenger theme key is unchanged. **Restart pre-registration** clears the introduction flag and session data without changing the theme.
 
