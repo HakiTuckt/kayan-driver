@@ -75,6 +75,197 @@
 .map-label { font-family: 'DM Sans', sans-serif; letter-spacing: 2px; }
 .native-google-map-section,
 .native-google-map-viewport { background-color: transparent !important; }
+.driver-map-panel {
+  background-color: rgb(6 45 36 / 92%);
+  border-color: rgb(255 255 255 / 32%);
+  color: #fff3df;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+.driver-app-shell { width: 100%; max-width: none; margin-inline: auto; container-name: driver-app; container-type: inline-size; }
+.driver-header-title { pointer-events: none; }
+.driver-profile-trigger { z-index: 1; }
+.driver-app-shell--immersive { max-width: none !important; border-inline: 0 !important; }
+.driver-section-nav { display: none; }
+.driver-mobile-nav { display: grid; }
+.driver-map-stage { height: calc(100svh - 121px); }
+.driver-map-overlay { max-height: calc(100% - 1.5rem); overflow-y: auto; }
+@media (min-width: 600px) {
+  .driver-app-shell:not(.driver-app-shell--immersive) { max-width: 840px; border-inline: 1px solid hsl(var(--border)); }
+  .driver-section-nav { display: grid; }
+  .driver-mobile-nav { display: none; }
+  .driver-map-stage { height: calc(100svh - 136px); }
+  .driver-map-overlay { max-height: calc(100% - 1.5rem); }
+}
+@media (max-width: 380px) {
+  .driver-header-title > p:first-child { font-size: 0.75rem; }
+  .driver-app-header [aria-label="Appearance"] { width: 5.5rem; }
+}
+@media (min-width: 600px) {
+  .driver-app-shell--immersive {
+    position: relative;
+    width: 100%;
+    height: min(100svh, 932px);
+    min-height: min(100svh, 932px);
+    max-width: 430px !important;
+    border-inline: 1px solid hsl(var(--border)) !important;
+  }
+  .driver-app-shell--immersive > .driver-app-header {
+    min-height: 64px;
+    padding: 0.75rem;
+  }
+  .driver-app-shell--immersive .driver-header-title { max-width: calc(100% - 9.5rem); }
+  .driver-app-shell--immersive .driver-demo-badge { display: none; }
+  .driver-app-shell--immersive .driver-section-nav { display: none; }
+  .driver-app-shell--immersive .driver-mobile-nav {
+    position: absolute;
+    inset-inline: 0;
+    bottom: 0;
+    display: grid;
+    width: 100%;
+    max-width: 430px;
+    border-inline: 1px solid hsl(var(--border));
+  }
+  .driver-app-shell--immersive .driver-map-stage { height: calc(min(100svh, 932px) - 124px); }
+}
+@media (min-width: 600px) {
+  .driver-app-shell:not(.driver-app-shell--immersive) {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    max-width: 430px !important;
+    height: min(100svh, 932px);
+    min-height: min(100svh, 932px);
+    border-inline: 1px solid hsl(var(--border));
+    overflow: hidden;
+  }
+  .driver-app-shell:not(.driver-app-shell--immersive) > .driver-app-header {
+    flex: 0 0 auto;
+    min-height: 64px;
+    padding: 0.75rem;
+  }
+  .driver-app-shell:not(.driver-app-shell--immersive) > .driver-app-main {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  .driver-app-shell:not(.driver-app-shell--immersive) .driver-header-title { max-width: calc(100% - 9.5rem); }
+  .driver-app-shell:not(.driver-app-shell--immersive) .driver-demo-badge { display: none; }
+  .driver-app-shell:not(.driver-app-shell--immersive) .driver-section-nav { display: none; }
+  .driver-app-shell:not(.driver-app-shell--immersive) .driver-mobile-nav {
+    position: absolute;
+    inset-inline: 0;
+    bottom: 0;
+    display: grid;
+    width: min(100%, 430px);
+    max-width: 430px;
+    margin-inline: auto;
+    border-inline: 1px solid hsl(var(--border));
+  }
+  .driver-app-shell:not(.driver-app-shell--immersive) .driver-section-intro h1 {
+    font-size: 1.5rem;
+    line-height: 1.25;
+  }
+  .driver-app-shell:not(.driver-app-shell--immersive) .driver-summary-grid,
+  .driver-app-shell:not(.driver-app-shell--immersive) .driver-earnings-breakdown {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .driver-app-shell:not(.driver-app-shell--immersive) .driver-summary-card {
+    gap: 0.875rem;
+    padding: 1rem;
+  }
+  .driver-app-shell:not(.driver-app-shell--immersive) .driver-summary-icon,
+  .driver-app-shell:not(.driver-app-shell--immersive) .driver-trip-icon {
+    flex: 0 0 auto;
+    padding: 0.625rem;
+  }
+  .driver-app-shell:not(.driver-app-shell--immersive) .driver-section-content {
+    min-height: 0;
+    padding: 1rem;
+    border-radius: 1.25rem;
+  }
+  .driver-app-shell:not(.driver-app-shell--immersive) .driver-earnings-breakdown > div {
+    padding: 1rem;
+  }
+  .driver-app-shell:not(.driver-app-shell--immersive) .driver-earnings-breakdown > div > p:nth-child(2) {
+    margin-top: 0.5rem;
+    font-size: 1.875rem;
+    line-height: 2.25rem;
+  }
+  .driver-app-shell:not(.driver-app-shell--immersive) .driver-trip-card {
+    gap: 0.75rem;
+    padding: 0.875rem;
+  }
+  .driver-app-shell:not(.driver-app-shell--immersive) .driver-trip-details > p:first-child {
+    font-size: 0.8125rem;
+    line-height: 1.2rem;
+  }
+  .driver-app-shell:not(.driver-app-shell--immersive) .driver-trip-status {
+    flex: 0 0 auto;
+    max-width: 6rem;
+    font-size: 0.75rem;
+  }
+}
+@media (min-width: 840px) {
+  .driver-app-shell:not(.driver-app-shell--immersive) { max-width: 960px; }
+}
+@media (min-width: 1200px) {
+  .driver-app-shell:not(.driver-app-shell--immersive) { max-width: 1120px; }
+}
+@media (min-width: 1600px) {
+  .driver-app-shell:not(.driver-app-shell--immersive) { max-width: 1280px; }
+}
+@container driver-app (max-width: 600px) {
+  .driver-summary-grid,
+  .driver-earnings-breakdown {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .driver-summary-card {
+    min-width: 0;
+    gap: 0.875rem;
+    padding: 1rem;
+  }
+  .driver-summary-icon,
+  .driver-trip-icon {
+    flex: 0 0 auto;
+    padding: 0.625rem;
+  }
+  .driver-section-content {
+    min-height: 0;
+    padding: 1rem;
+    border-radius: 1.25rem;
+  }
+  .driver-earnings-breakdown > div {
+    min-width: 0;
+    padding: 1rem;
+  }
+  .driver-earnings-breakdown > div > p:nth-child(2) {
+    margin-top: 0.5rem;
+    font-size: 1.875rem;
+    line-height: 2.25rem;
+  }
+  .driver-trip-card {
+    min-width: 0;
+    gap: 0.75rem;
+    padding: 0.875rem;
+  }
+  .driver-trip-details { min-width: 0; }
+  .driver-trip-status {
+    flex: 0 0 auto;
+    max-width: 6rem;
+  }
+}
+@media (max-height: 479.98px) {
+  .driver-map-overlay { bottom: 0.5rem; max-height: calc(100% - 1rem); }
+  .driver-map-overlay > section { padding: 0.5rem; }
+}
+@media (min-height: 480px) and (max-height: 899px) {
+  .driver-map-overlay { overflow-y: auto; }
+}
+@media (min-height: 900px) {
+  .driver-map-overlay { max-height: none; overflow-y: visible; }
+}
 @keyframes enter { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
 .enter { animation: enter .4s ease-out; }
 @media (prefers-reduced-motion: reduce) { .enter { animation: none; } }

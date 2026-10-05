@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { GoogleMap as CapacitorGoogleMap, LatLngBounds } from '@capacitor/google-maps';
 import { LocateFixed } from 'lucide-react';
+import { useTheme } from 'next-themes';
 import useDeviceLocation from '@/hooks/useDeviceLocation';
 
 declare global {
@@ -69,6 +70,8 @@ function BrowserGoogleKayanMap({ hasRoute, destination, stage = null, immersive 
   const [routeStatus, setRouteStatus] = useState('');
   const [routeAttempt, setRouteAttempt] = useState(0);
   const [mapReady, setMapReady] = useState(false);
+  const { resolvedTheme } = useTheme();
+  const isDark = resolvedTheme === 'dark';
   const location = useDeviceLocation({ autoStart: true });
   const { position, fresh, enabled } = location;
   const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY?.trim();
@@ -76,13 +79,12 @@ function BrowserGoogleKayanMap({ hasRoute, destination, stage = null, immersive 
   useEffect(() => {
     if (!apiKey || !container.current) return;
     let disposed = false;
-    let mapInitialized = false;
     let observer: ResizeObserver | null = null;
     let dragListener: google.maps.MapsEventListener | null = null;
     const previousAuthFailure = window.gm_authFailure;
     const authFailure = () => {
       previousAuthFailure?.();
-      if (!disposed && !mapInitialized) setMapError(`Google Maps rejected this website referrer. In Google Cloud Console → Google Maps Platform → Credentials → this API key → Website restrictions, add ${window.location.origin}/* and save. Keep API restrictions set to Maps JavaScript API, then reload. If this origin is already allowed, check that Maps JavaScript API is enabled and billing is active.`);
+      if (!disposed) setMapError(`Google Maps rejected this website referrer. In Google Cloud Console → Google Maps Platform → Credentials → this API key → Website restrictions, add ${window.location.origin}/* and save. Keep API restrictions set to Maps JavaScript API, then reload. If this origin is already allowed, check that Maps JavaScript API is enabled and billing is active.`);
     };
     window.gm_authFailure = authFailure;
 
@@ -91,14 +93,13 @@ function BrowserGoogleKayanMap({ hasRoute, destination, stage = null, immersive 
       const instance = new google.maps.Map(container.current, {
         center: { lat: -15.4067, lng: 28.2871 },
         zoom: 13,
-        styles: kayanMapStyles,
+        styles: [],
         gestureHandling: 'cooperative',
         mapTypeControl: false,
         streetViewControl: false,
         fullscreenControl: false,
       });
       map.current = instance;
-      mapInitialized = true;
       dragListener = instance.addListener('dragstart', () => {
         follow.current = false;
         setFollowing(false);
@@ -123,6 +124,10 @@ function BrowserGoogleKayanMap({ hasRoute, destination, stage = null, immersive 
       map.current = null;
     };
   }, [apiKey]);
+
+  useEffect(() => {
+    map.current?.setOptions({ styles: isDark ? kayanMapStyles : [] });
+  }, [isDark, mapReady]);
 
   useEffect(() => {
     const instance = map.current;
@@ -230,9 +235,9 @@ function BrowserGoogleKayanMap({ hasRoute, destination, stage = null, immersive 
   const routeFailed = routeStatus.startsWith('Routes API denied') || routeStatus.startsWith('Could not calculate');
   const gpsLabel = fresh ? 'GPS live' : location.error ? 'GPS unavailable' : location.waiting ? 'Locating…' : 'GPS ready';
 
-  return <section className={`relative isolate flex h-full min-h-0 flex-col overflow-hidden bg-[#0b211b] ${immersive ? '' : 'min-h-[390px] rounded-3xl border bg-card shadow-sm md:min-h-[560px]'}`}>
+  return <section className={`relative isolate flex h-full min-h-0 flex-col overflow-hidden bg-slate-100 dark:bg-[#0b211b] ${immersive ? '' : 'min-h-[390px] rounded-3xl border bg-card shadow-sm md:min-h-[560px]'}`}>
     {!immersive && <div className="flex flex-wrap items-center justify-between gap-3 border-b bg-card px-4 py-3"><div><p className="text-sm font-bold">Driver map</p><p className="mt-1 text-[10px] text-muted-foreground">Device location · Lusaka</p></div><span className={`inline-flex items-center gap-2 rounded-full bg-secondary px-3 py-1.5 text-[10px] font-semibold ${fresh ? 'text-foreground' : 'text-muted-foreground'}`}><span className={`h-1.5 w-1.5 rounded-full ${fresh ? 'animate-pulse bg-primary' : location.error ? 'bg-destructive' : 'bg-muted-foreground'}`}/>{gpsLabel}</span></div>}
-    <div className={`relative isolate min-h-0 flex-1 overflow-hidden bg-[#0b211b] ${immersive ? '' : 'h-[36svh] min-h-[250px] max-h-[340px] md:h-auto md:min-h-[390px] md:max-h-none'}`}>
+    <div className={`relative isolate min-h-0 flex-1 overflow-hidden bg-slate-100 dark:bg-[#0b211b] ${immersive ? '' : 'h-[36svh] min-h-[250px] max-h-[340px] md:h-auto md:min-h-[390px] md:max-h-none'}`}>
     <div ref={container} aria-label="Interactive Google map" className="absolute inset-0 z-0"/>
     <div className="pointer-events-none absolute right-3 top-3 z-[400] flex flex-col items-end gap-2 sm:right-4 sm:top-4">
       <button className="map-control pointer-events-auto rounded-2xl" aria-label={position ? 'Center on device position' : 'Center on Lusaka default view'} onClick={center}><LocateFixed size={18}/></button>{position && !following && <button onClick={center} className="pointer-events-auto rounded-xl border bg-card px-3 py-2 text-[10px] font-bold text-foreground shadow-lg">Follow device</button>}
@@ -259,6 +264,8 @@ function NativeGoogleKayanMap({ hasRoute, destination, stage = null, immersive =
   const [routeStatus, setRouteStatus] = useState('');
   const [routeAttempt, setRouteAttempt] = useState(0);
   const [mapReady, setMapReady] = useState(false);
+  const { resolvedTheme } = useTheme();
+  const isDark = resolvedTheme === 'dark';
   const location = useDeviceLocation({ autoStart: true });
   const { position, fresh } = location;
   const androidApiKey = import.meta.env.VITE_GOOGLE_MAPS_ANDROID_API_KEY?.trim();
@@ -273,10 +280,12 @@ function NativeGoogleKayanMap({ hasRoute, destination, stage = null, immersive =
     }
 
     let disposed = false;
+    setMapReady(false);
     const backgroundOverrides: Array<{ element: HTMLElement; backgroundColor: string }> = [];
     for (let ancestor: HTMLElement | null = mapHost; ancestor; ancestor = ancestor.parentElement) {
       backgroundOverrides.push({ element: ancestor, backgroundColor: ancestor.style.backgroundColor });
       ancestor.style.backgroundColor = 'transparent';
+      if (ancestor.classList.contains('native-google-map-section')) break;
     }
 
     const element = document.createElement('capacitor-google-map');
@@ -292,7 +301,7 @@ function NativeGoogleKayanMap({ hasRoute, destination, stage = null, immersive =
       config: {
         center: { lat: -15.4067, lng: 28.2871 },
         zoom: 13,
-        styles: kayanMapStyles,
+        styles: isDark ? kayanMapStyles : [],
       },
     }).then(async instance => {
       if (disposed) {
@@ -323,7 +332,7 @@ function NativeGoogleKayanMap({ hasRoute, destination, stage = null, immersive =
         ancestor.style.backgroundColor = backgroundColor;
       }
     };
-  }, [androidApiKey]);
+  }, [androidApiKey, isDark]);
 
   useEffect(() => {
     const instance = map.current;
@@ -457,7 +466,7 @@ function NativeGoogleKayanMap({ hasRoute, destination, stage = null, immersive =
   const routeFailed = routeStatus.startsWith('Could not');
   const gpsLabel = fresh ? 'GPS live' : location.error ? 'GPS unavailable' : location.waiting ? 'Locating…' : 'GPS ready';
 
-  return <section className={`native-google-map-section relative isolate flex h-full min-h-0 flex-col overflow-hidden ${immersive ? '' : 'min-h-[390px] rounded-3xl border bg-card shadow-sm md:min-h-[560px]'}`}>
+  return <section className={`native-google-map-section relative isolate flex h-full min-h-0 flex-col overflow-hidden bg-slate-100 dark:bg-[#0b211b] ${immersive ? '' : 'min-h-[390px] rounded-3xl border bg-card shadow-sm md:min-h-[560px]'}`}>
     {!immersive && <div className="relative z-10 flex flex-wrap items-center justify-between gap-3 border-b bg-card px-4 py-3"><div><p className="text-sm font-bold">Driver map · Google Maps</p><p className="mt-1 text-[10px] text-muted-foreground">Device location · Lusaka</p></div><span className={`inline-flex items-center gap-2 rounded-full bg-secondary px-3 py-1.5 text-[10px] font-semibold ${fresh ? 'text-foreground' : 'text-muted-foreground'}`}><span className={`h-1.5 w-1.5 rounded-full ${fresh ? 'animate-pulse bg-primary' : location.error ? 'bg-destructive' : 'bg-muted-foreground'}`}/>{gpsLabel}</span></div>}
     <div className={`native-google-map-viewport relative min-h-0 flex-1 overflow-hidden ${immersive ? '' : 'h-[36svh] min-h-[250px] max-h-[340px] md:h-auto md:min-h-[390px] md:max-h-none'}`}>
     <div ref={host} aria-label="Interactive native Google map" className="absolute inset-0"/>
