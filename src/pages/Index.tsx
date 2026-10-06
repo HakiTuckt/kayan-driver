@@ -17,8 +17,11 @@ import {
   expirePassengerRideRequest,
   liveDispatchEnabled,
   loadActivePassengerRideRequest,
+  loadPassengerDriverLocation,
   loadPassengerRideStatus,
+  subscribeToPassengerDriverLocation,
   subscribeToPassengerRide,
+  type PassengerDriverLocation,
   type RideRequestStatus,
 } from '@/lib/ride-dispatch';
 
@@ -49,6 +52,7 @@ export default function Index() {
   const [dispatchRideId, setDispatchRideId] = useState<string | null>(null);
   const [dispatchCreatedAt, setDispatchCreatedAt] = useState<string | null>(null);
   const [dispatchStatus, setDispatchStatus] = useState<RideRequestStatus | null>(null);
+  const [driverLocation, setDriverLocation] = useState<PassengerDriverLocation | null>(null);
   const [bookingBusy, setBookingBusy] = useState(false);
   const [cancellingRide, setCancellingRide] = useState(false);
   const [restoringPassengerRide, setRestoringPassengerRide] = useState(liveDispatchEnabled);
@@ -155,6 +159,32 @@ export default function Index() {
     };
   }, [dispatchRideId]);
   useEffect(() => {
+    if (!dispatchRideId || dispatchStatus !== 'accepted') {
+      setDriverLocation(null);
+      return;
+    }
+    let cancelled = false;
+    let receivedRealtimeLocation = false;
+    setDriverLocation(null);
+    const unsubscribe = subscribeToPassengerDriverLocation(
+      dispatchRideId,
+      location => {
+        receivedRealtimeLocation = true;
+        setDriverLocation(location);
+      },
+      message => toast.error(message),
+    );
+    void loadPassengerDriverLocation(dispatchRideId).then(location => {
+      if (!cancelled && !receivedRealtimeLocation) setDriverLocation(location);
+    }).catch(error => {
+      if (!cancelled) toast.error(error instanceof Error ? error.message : 'Could not load the driver location.');
+    });
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, [dispatchRideId, dispatchStatus]);
+  useEffect(() => {
     if (!dispatchRideId || dispatchStatus !== 'searching' || !dispatchCreatedAt) return;
     const ageMillis = Date.now() - new Date(dispatchCreatedAt).getTime();
     const timeoutMillis = Math.max(0, 65_000 - ageMillis);
@@ -171,6 +201,9 @@ export default function Index() {
     setActiveRide(null); setDestination(null); setView('activity');
     toast.success(cancelled ? 'Demo ride cancelled. No charge applied.' : 'Demo ride completed. No payment collected.');
   };
+  const activeDriverLocation = dispatchStatus === 'accepted' && driverLocation?.ride_id === dispatchRideId
+    ? driverLocation
+    : null;
   const nav = <>
     <div className="mb-8 px-3"><Brand/></div>
     <p className="mb-3 px-4 text-[9px] font-semibold uppercase tracking-[.2em] text-[#9ab3a4]">Your everyday journey</p>
@@ -191,11 +224,11 @@ export default function Index() {
         <div className="mb-6 flex items-end justify-between"><div><p className="mb-2 text-[10px] font-semibold uppercase tracking-[.2em] text-muted-foreground">YOUR CITY. YOUR JOURNEY.</p><h1 className="text-2xl font-extrabold tracking-tight sm:text-[30px]">{view === 'book' ? <>Good journeys start with <span className="text-primary">KAYAN.</span></> : 'Every journey, in one place.'}</h1><p className="mt-2 text-xs text-muted-foreground">{view === 'book' ? 'Wherever life takes you, let’s get there better.' : 'Your demo rides from this browser session.'}</p></div><div className="hidden items-center gap-2 pb-1 text-[10px] font-semibold text-muted-foreground xl:flex"><ShieldCheck size={16} className="text-primary"/> Professional by design</div></div>
         {view === 'book' ? <>
           <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_365px] 2xl:grid-cols-[minmax(0,1fr)_400px]">
-            <div className="min-w-0"><KayanMap stage={activeRide ? tripStage : null} hasRoute={!!destination || !!activeRide} destination={(activeRide?.destination || destination)?.name || ''}/></div>
+            <div className="min-w-0"><KayanMap stage={activeRide && !dispatchRideId ? tripStage : null} hasRoute={!!destination || !!activeRide} destination={(activeRide?.destination || destination)?.name || ''} liveRideAccepted={liveDispatchEnabled && dispatchStatus === 'accepted'} driverLocation={activeDriverLocation}/></div>
             <section className="rounded-2xl border border-border bg-card p-5 sm:p-6">{activeRide ? liveDispatchEnabled ? <div className="flex min-h-[520px] flex-col justify-center">
               <p className="text-[10px] font-bold uppercase tracking-[.18em] text-primary">Live ride request</p>
               <h2 className="mt-2 text-2xl font-extrabold">{dispatchStatus ? rideStatusLabels[dispatchStatus] : 'Sending your request…'}</h2>
-              <p className="mt-2 text-sm leading-6 text-muted-foreground">{dispatchStatus === 'searching' ? 'Online drivers have been notified. Keep this page open to receive status updates.' : dispatchStatus === 'accepted' ? 'Your request has been accepted. Live driver location and in-app trip management are not available in this preview.' : dispatchStatus === 'no_drivers' ? 'Please try again later or choose a different destination.' : dispatchStatus === 'completed' ? 'Your driver marked the ride complete. No payment was processed.' : dispatchStatus === 'cancelled' ? 'No driver will be dispatched for this request.' : 'Please wait while we confirm the request with the ride service.'}</p>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">{dispatchStatus === 'searching' ? 'Online drivers have been notified. Keep this page open to receive status updates.' : dispatchStatus === 'accepted' ? activeDriverLocation ? 'Your driver’s latest location is shown on the map and is shared only for this accepted ride.' : 'Your driver accepted. Waiting for the first GPS update; the location will be shared only for this accepted ride.' : dispatchStatus === 'no_drivers' ? 'Please try again later or choose a different destination.' : dispatchStatus === 'completed' ? 'Your driver marked the ride complete. No payment was processed.' : dispatchStatus === 'cancelled' ? 'No driver will be dispatched for this request.' : 'Please wait while we confirm the request with the ride service.'}</p>
               <div className="my-6 space-y-4 rounded-2xl bg-secondary p-5">
                 <div><p className="text-[10px] text-muted-foreground">Pickup</p><p className="mt-1 text-sm font-semibold">{activeRide.pickup}</p></div>
                 <div><p className="text-[10px] text-muted-foreground">Destination</p><p className="mt-1 text-sm font-semibold">{activeRide.destination.name}</p></div>

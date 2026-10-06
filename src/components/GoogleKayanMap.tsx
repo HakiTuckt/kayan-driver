@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { GoogleMap as CapacitorGoogleMap, LatLngBounds } from '@capacitor/google-maps';
+import type { Position } from '@capacitor/geolocation';
 import { LocateFixed, MapPinned, Navigation } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import useDeviceLocation from '@/hooks/useDeviceLocation';
 import { Switch } from '@/components/ui/switch';
+import type { DriverLocationFix } from '@/lib/ride-dispatch';
 
 declare global {
   interface Window {
@@ -108,9 +110,41 @@ type GoogleKayanMapProps = {
   online?: boolean;
   availabilityBusy?: boolean;
   liveDriver?: boolean;
+  shareLocation?: boolean;
   onAvailabilityChange?: (online: boolean) => void;
+  onDriverLocation?: (location: DriverLocationFix) => void | Promise<void>;
   onRouteInfo?: (routeInfo: GoogleRouteInfo | null) => void;
 };
+
+function useRideLocationSharing(
+  shareLocation: boolean,
+  demoLocation: boolean,
+  position: Position | null,
+  fresh: boolean,
+  onDriverLocation?: (location: DriverLocationFix) => void | Promise<void>,
+) {
+  const callback = useRef(onDriverLocation);
+  const lastSharedAt = useRef(0);
+  callback.current = onDriverLocation;
+
+  useEffect(() => {
+    if (!shareLocation) {
+      lastSharedAt.current = 0;
+      return;
+    }
+    if (demoLocation || !fresh || !position || !callback.current) return;
+    const now = Date.now();
+    if (now - lastSharedAt.current < 10_000) return;
+    lastSharedAt.current = now;
+    void Promise.resolve(callback.current({
+      latitude: position.coords.latitude,
+      longitude: position.coords.longitude,
+      accuracy_m: position.coords.accuracy,
+    })).catch(error => {
+      console.error('Could not send the accepted-ride location update:', error);
+    });
+  }, [demoLocation, fresh, position, shareLocation]);
+}
 
 function getDistanceMeters(from: NavigationPoint, to: NavigationPoint) {
   const radians = (degrees: number) => degrees * Math.PI / 180;
@@ -246,7 +280,7 @@ export default function GoogleKayanMap(props: GoogleKayanMapProps) {
   return Capacitor.isNativePlatform() ? <NativeGoogleKayanMap {...props}/> : <BrowserGoogleKayanMap {...props}/>;
 }
 
-function BrowserGoogleKayanMap({ hasRoute, destination, stage = null, immersive = false, integrated = false, demoLocation = false, online = false, availabilityBusy = false, liveDriver = false, onAvailabilityChange, onRouteInfo }: GoogleKayanMapProps) {
+function BrowserGoogleKayanMap({ hasRoute, destination, stage = null, immersive = false, integrated = false, demoLocation = false, online = false, availabilityBusy = false, liveDriver = false, shareLocation = false, onAvailabilityChange, onDriverLocation, onRouteInfo }: GoogleKayanMapProps) {
   const routeRequested = hasRoute && stage !== null;
   const container = useRef<HTMLDivElement>(null);
   const map = useRef<google.maps.Map | null>(null);
@@ -274,6 +308,7 @@ function BrowserGoogleKayanMap({ hasRoute, destination, stage = null, immersive 
   const fresh = demoLocation || location.fresh;
   const enabled = demoLocation || location.enabled;
   const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY?.trim();
+  useRideLocationSharing(shareLocation, demoLocation, position, fresh, onDriverLocation);
 
   useEffect(() => {
     const metrics = routeMetrics.current;
@@ -512,7 +547,7 @@ function BrowserGoogleKayanMap({ hasRoute, destination, stage = null, immersive 
   </section>;
 }
 
-function NativeGoogleKayanMap({ hasRoute, destination, stage = null, immersive = false, integrated = false, demoLocation = false, online = false, availabilityBusy = false, liveDriver = false, onAvailabilityChange, onRouteInfo }: GoogleKayanMapProps) {
+function NativeGoogleKayanMap({ hasRoute, destination, stage = null, immersive = false, integrated = false, demoLocation = false, online = false, availabilityBusy = false, liveDriver = false, shareLocation = false, onAvailabilityChange, onDriverLocation, onRouteInfo }: GoogleKayanMapProps) {
   const routeRequested = hasRoute && stage !== null;
   const host = useRef<HTMLDivElement>(null);
   const map = useRef<Awaited<ReturnType<typeof CapacitorGoogleMap.create>> | null>(null);
@@ -539,6 +574,7 @@ function NativeGoogleKayanMap({ hasRoute, destination, stage = null, immersive =
   const location = useDeviceLocation({ autoStart: !demoLocation });
   const position = demoLocation ? lusakaDemoPosition : location.position;
   const fresh = demoLocation || location.fresh;
+  useRideLocationSharing(shareLocation, demoLocation, position, fresh, onDriverLocation);
   const androidApiKey = import.meta.env.VITE_GOOGLE_MAPS_ANDROID_API_KEY?.trim();
   const routesApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY?.trim();
 

@@ -3,3 +3,6 @@ verify_jwt = false
 
 [functions.create-ride-request]
 verify_jwt = true
+
+[functions.driver-application-review]
+verify_jwt = true

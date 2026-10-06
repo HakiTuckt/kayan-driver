@@ -60,7 +60,17 @@ export type RestoredDriverAccount = {
   phone: string;
   phoneVerified: boolean;
   documentsComplete: boolean;
+  accountStatus: DriverAccountStatus | null;
+  reviewNotes: string | null;
 };
+
+export type DriverAccountStatus = 'pending_review' | 'active' | 'suspended' | 'rejected';
+
+const driverAccountStatuses: DriverAccountStatus[] = ['pending_review', 'active', 'suspended', 'rejected'];
+
+function isDriverAccountStatus(value: unknown): value is DriverAccountStatus {
+  return typeof value === 'string' && driverAccountStatuses.some(status => status === value);
+}
 
 export async function ensureAnonymousSupabaseSession() {
   const supabase = getSupabaseClient();
@@ -88,11 +98,34 @@ export async function restoreDemoDriverProfile(): Promise<RestoredDriverAccount 
 
   const { data: savedProfile, error: profileError } = await supabase
     .from('driver_profiles')
-    .select('id, full_name, phone, city')
+    .select('id, full_name, phone, city, account_status')
     .eq('id', userId)
     .maybeSingle();
   if (profileError) throw new Error(`Could not load the saved driver profile: ${profileError.message}`);
-  if (!savedProfile) return { profile: null, phone, phoneVerified, documentsComplete: false };
+  if (!savedProfile) {
+    return {
+      profile: null,
+      phone,
+      phoneVerified,
+      documentsComplete: false,
+      accountStatus: null,
+      reviewNotes: null,
+    };
+  }
+  if (!isDriverAccountStatus(savedProfile.account_status)) {
+    throw new Error('The saved driver profile has an invalid application status.');
+  }
+  const accountStatus = savedProfile.account_status;
+  let reviewNotes: string | null = null;
+  if (accountStatus === 'rejected') {
+    const { data: review, error: reviewError } = await supabase
+      .from('driver_profiles')
+      .select('review_notes')
+      .eq('id', userId)
+      .single();
+    if (reviewError) throw new Error(`Could not load the application review note: ${reviewError.message}`);
+    reviewNotes = review.review_notes;
+  }
 
   const { data: vehicle, error: vehicleError } = await supabase
     .from('driver_vehicles')
@@ -126,6 +159,8 @@ export async function restoreDemoDriverProfile(): Promise<RestoredDriverAccount 
     phone,
     phoneVerified,
     documentsComplete: driverDocumentTypes.every(type => completedTypes.has(type)),
+    accountStatus,
+    reviewNotes,
   };
 }
 

@@ -1,0 +1,33 @@
+name: Deploy KAYAN driver application review
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Validate deployment settings
+        run: |
+          test -n "$SUPABASE_ACCESS_TOKEN" || { echo "::error::Add the SUPABASE_ACCESS_TOKEN repository secret."; exit 1; }
+          test -n "$SUPABASE_PROJECT_REF" || { echo "::error::Add the SUPABASE_PROJECT_REF repository secret."; exit 1; }
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+
+      - name: Deploy reviewer function with JWT verification
+        run: supabase functions deploy driver-application-review --project-ref "$SUPABASE_PROJECT_REF"
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}

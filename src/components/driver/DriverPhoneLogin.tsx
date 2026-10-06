@@ -3,18 +3,22 @@ import { ArrowLeft, ArrowRight, ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { sendDriverPhoneLoginOtp, verifyDriverPhoneLoginOtp } from '@/lib/driver-phone-auth';
+import { resendDriverPhoneLoginOtp, sendDriverPhoneLoginOtp, verifyDriverPhoneLoginOtp, type DriverPhoneOtpFlow } from '@/lib/driver-phone-auth';
 
 export default function DriverPhoneLogin({
   onAuthenticated,
   onCancel,
+  audience = 'driver',
 }: {
   onAuthenticated: () => Promise<void> | void;
   onCancel?: () => void;
+  audience?: 'driver' | 'reviewer';
 }) {
   const [phone, setPhone] = useState('');
   const [code, setCode] = useState('');
   const [codeSent, setCodeSent] = useState(false);
+  const [otpFlow, setOtpFlow] = useState<DriverPhoneOtpFlow>('sign-in');
+  const [linkedUserId, setLinkedUserId] = useState<string | null>(null);
   const [whatsappConsent, setWhatsappConsent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -25,13 +29,16 @@ export default function DriverPhoneLogin({
     try {
       if (!codeSent) {
         if (!whatsappConsent) throw new Error('Agree to receive the verification code on WhatsApp before continuing.');
-        setPhone(await sendDriverPhoneLoginOtp(phone));
+        const result = await sendDriverPhoneLoginOtp(phone, audience === 'driver');
+        setPhone(result.phone);
+        setOtpFlow(result.flow);
+        setLinkedUserId(result.userId);
         setCodeSent(true);
         setCode('');
         return;
       }
 
-      await verifyDriverPhoneLoginOtp(phone, code);
+      await verifyDriverPhoneLoginOtp(phone, code, otpFlow, linkedUserId);
       await onAuthenticated();
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : 'Phone verification failed. Please try again.');
@@ -44,7 +51,7 @@ export default function DriverPhoneLogin({
     setError('');
     setBusy(true);
     try {
-      setPhone(await sendDriverPhoneLoginOtp(phone));
+      setPhone(await resendDriverPhoneLoginOtp(phone, otpFlow));
       setCode('');
       setCodeSent(true);
     } catch (resendError) {
@@ -56,12 +63,20 @@ export default function DriverPhoneLogin({
 
   return <section className="mx-auto w-full max-w-xl rounded-3xl border bg-card p-5 shadow-sm sm:p-8">
     <span className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-secondary text-primary"><ShieldCheck size={23}/></span>
-    <p className="text-xs font-bold uppercase tracking-[.16em] text-primary">Driver phone sign-in</p>
+    <p className="text-xs font-bold uppercase tracking-[.16em] text-primary">{audience === 'reviewer' ? 'Reviewer phone sign-in' : 'Driver phone sign-in'}</p>
     <h1 className="mt-2 text-2xl font-extrabold leading-tight tracking-tight sm:text-3xl">
-      {codeSent ? 'Enter the WhatsApp code' : 'Sign in with your phone'}
+      {codeSent
+        ? otpFlow === 'link-application' ? 'Verify your application phone' : 'Enter the WhatsApp code'
+        : audience === 'reviewer' ? 'Sign in as a reviewer' : 'Sign in or verify your application'}
     </h1>
     <p className="mt-2 text-sm leading-6 text-muted-foreground">
-      {codeSent ? `Enter the 6-digit WhatsApp code sent to ${phone}.` : 'We’ll send a one-time code to the phone number on your driver account using WhatsApp.'}
+      {codeSent
+        ? otpFlow === 'link-application'
+          ? `Enter the code sent to ${phone} to link this saved application to its verified phone.`
+          : `Enter the 6-digit WhatsApp code sent to ${phone}.`
+        : audience === 'reviewer'
+          ? 'Use the verified phone account that KAYAN has authorized to review applications.'
+          : 'For a saved application on this device, verify the submitted phone number to keep this same driver profile. Otherwise, sign in to your existing verified phone account.'}
     </p>
     <form onSubmit={submit} className="mt-7 space-y-2">
       <Label htmlFor="driver-phone-login">{codeSent ? '6-digit WhatsApp code' : 'Phone number'}</Label>
@@ -97,6 +112,6 @@ export default function DriverPhoneLogin({
       </div>
       {codeSent && <Button type="button" variant="link" className="h-auto px-0 text-xs" disabled={busy} onClick={() => void resend()}>Resend WhatsApp code</Button>}
     </form>
-    <p className="mt-5 text-xs leading-5 text-muted-foreground">This is passwordless phone sign-in, not two-factor authentication. WhatsApp delivery charges may apply through the configured provider.</p>
+    <p className="mt-5 text-xs leading-5 text-muted-foreground">Phone verification proves control of this number; it is not two-factor authentication. WhatsApp delivery charges may apply through the configured provider.</p>
   </section>;
 }

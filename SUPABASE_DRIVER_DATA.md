@@ -11,8 +11,9 @@ The private driver-data migration creates the schema and row-level security used
 - Row-level security and grants limiting authenticated drivers to their own rows and their own storage folder.
 - Anonymous Supabase Auth sessions for first-time application submissions. Phone verification is disabled during registration; WhatsApp OTP remains available only for returning accounts that already have a verified phone.
 - Required application uploads: driving licence, national registration card, vehicle registration, and roadworthiness certificate. Each file is stored privately; only document metadata and the private object path are stored in Postgres. Trip simulations are not stored.
+- A manually provisioned reviewer allowlist, an audited approve/reject decision, and a protected review function that issues five-minute document links only to verified, authorized reviewers.
 
-New driver profiles and document records start in `pending_review`. The client cannot set or edit the account or document review status. No public access or staff-review policy is added. Staff access should be introduced later through a server-verified role system; never put a Supabase service-role key in the browser or mobile app.
+New driver profiles and document records start in `pending_review`. The client cannot set or edit the account or document review status. Reviewers must be existing Supabase Auth users with a verified phone and a manually provisioned reviewer record; applicants cannot grant themselves reviewer access. Never put a Supabase service-role key in the browser or mobile app.
 
 The registration flow accepts PDF, JPG, or PNG files up to 10 MiB each. The document path uses this form so the storage policies can isolate each driver's files:
 
@@ -31,7 +32,32 @@ The registration flow accepts PDF, JPG, or PNG files up to 10 MiB each. The docu
 
 Before using real files, inspect the project's existing Storage policies. Supabase combines permissive policies with `OR`, so remove any existing policy that grants broader access to this bucket or to all storage objects; this migration does not delete policies it does not own.
 
-The Driver demo stores profile and vehicle details and uploads four required documents to private Supabase Storage. On submission, the app creates an anonymous Auth session if needed and saves the application and documents under that session's user ID. The phone number is contact information only and is not verified during registration. The thank-you screen tells applicants that KAYAN will contact them using that number; the in-app demo does not review or approve applications. Anonymous applications are tied to the current app session and cannot be recovered if app data is cleared or the app is reinstalled. Do not sign out of an anonymous application session or upload genuine identity documents with this demo build. Returning accounts that already have a verified phone can still use passwordless WhatsApp OTP sign-in; users must consent to receive that message and have WhatsApp at the verified number. There is no SMS delivery or fallback. This is phone-possession authentication, not true two-factor authentication. Before public use, add a stronger recovery plan, a server-authorized staff review flow, retention/deletion controls, and confirm applicable Zambia privacy and data-residency requirements.
+## Driver application review
+
+The `driver-application-review` Edge Function powers `/admin/driver-applications`. It authenticates the reviewer with the existing verified-phone OTP flow, checks the server-managed reviewer allowlist, and uses service-role access only inside the function. The page does not have direct access to applicant rows or document storage. Review links expire after five minutes.
+
+To enable reviews in a Supabase project:
+
+1. Apply [`supabase/migrations/20261006020000_driver_application_review.sql`](./supabase/migrations/20261006020000_driver_application_review.sql) after the driver-data and live-dispatch migrations.
+2. Create the reviewer as a verified Supabase Auth user using a phone number the reviewer controls. Reviewer sign-in uses the existing WhatsApp OTP flow and does not create new Auth users.
+3. In **Authentication → Users**, copy that reviewer's Auth user UUID. As the project owner, add only trusted reviewers in **SQL Editor**:
+
+   ```sql
+   insert into public.driver_application_reviewers (user_id)
+   values ('<verified-reviewer-auth-user-uuid>');
+   ```
+
+   Do not expose reviewer provisioning in the app. To revoke access, set `is_active = false` for that user in the reviewer table.
+4. In GitHub **Actions**, run **Deploy KAYAN driver application review**. It deploys `driver-application-review` with JWT verification enabled, using the existing `SUPABASE_ACCESS_TOKEN` and `SUPABASE_PROJECT_REF` repository secrets.
+5. Sign in at `/admin/driver-applications`. Approval is enabled only when the vehicle and all four required document types are present. Approving activates the driver and marks pending documents approved. Declining requires a reason, marks the profile rejected, and records an audit event. Rejected applicants must contact KAYAN; self-service resubmission is not enabled yet.
+
+Apply the migration and deploy the function before granting reviewer access. Do not test approvals with genuine applicant documents until KAYAN has finalized its retention and deletion policy.
+
+The Driver demo stores profile and vehicle details and uploads four required documents to private Supabase Storage. On submission, the app creates an anonymous Auth session if needed and saves the application and documents under that session's user ID. The phone number is contact information only and is not verified during registration. Live dispatch is enabled only after an application is approved (`account_status = 'active'`); phone verification is not an additional live-dispatch gate. To make an anonymous application recoverable, use **Sign in with phone** on the same app session and verify the exact phone number submitted with that application; this links the verified phone to the existing Auth user and preserves its profile and document ownership. If app data is cleared before phone verification, the anonymous application cannot be recovered. Approved drivers use device GPS while the app is open. Coordinates are sent only during an accepted live ride and are visible only to that ride's passenger and driver. The location row is removed when the ride ends or is cancelled; no location is stored while a driver is waiting for offers. The in-app demo does not review or approve applications. Returning accounts that already have a verified phone can use passwordless WhatsApp OTP sign-in; users must consent to receive that message and have WhatsApp at the verified number. There is no SMS delivery or fallback. This is phone-possession authentication, not true two-factor authentication. Before public use, add a stronger recovery plan, a server-authorized staff review flow, retention/deletion controls, and confirm applicable Zambia privacy and data-residency requirements.
+
+## Accepted-ride location sharing
+
+Apply [`supabase/migrations/20261006030000_driver_ride_live_location.sql`](./supabase/migrations/20261006030000_driver_ride_live_location.sql) after the live-dispatch migration. It creates one latest-location row per accepted ride, enables its Supabase Realtime publication, restricts reads to that ride's passenger and accepted driver, and authorizes writes through a driver-owned RPC. A database trigger deletes the row when the ride leaves the `accepted` state or its accepted driver changes. The driver app sends a fresh foreground GPS fix about every 10 seconds while a live ride is accepted. After a live ride is completed, the app restores online availability; if the server cannot confirm that change, it reports the failure and leaves the driver offline. The passenger map dims the marker if its last update is more than 30 seconds old. Apply the migration before expecting location updates in either app.
 
 ## Meta WhatsApp Cloud API setup for phone OTP
 

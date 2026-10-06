@@ -7,6 +7,7 @@ import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import Website from "./pages/Website";
 import Driver from "./pages/Driver";
+import DriverApplicationReview from "./pages/DriverApplicationReview";
 import Projects from "./pages/Projects";
 import { ThemeProvider } from "next-themes";
 
@@ -24,6 +25,7 @@ function AppRoutes() {
         <Routes>
           <Route path="/" element={driverBuild ? <Driver /> : <Index />} />
           <Route path="/driver" element={<Driver />} />
+          <Route path="/admin/driver-applications" element={<DriverApplicationReview />} />
           {!driverBuild && <Route path="/website" element={<Website />} />}
           <Route path="/projects" element={<Projects />} />
           <Route path="*" element={<NotFound />} />

@@ -20,6 +20,17 @@ export type PassengerRideUpdate = {
   accepted_driver_id: string | null;
 };
 
+export type DriverLocationFix = {
+  latitude: number;
+  longitude: number;
+  accuracy_m: number;
+};
+
+export type PassengerDriverLocation = DriverLocationFix & {
+  ride_id: string;
+  updated_at: string;
+};
+
 export type ActivePassengerRideRequest = {
   id: string;
   created_at: string;
@@ -119,6 +130,95 @@ export async function finishDriverRideRequest(rideId: string, cancelled: boolean
   });
   if (error) throw new Error(`Could not update the passenger ride status: ${error.message}`);
   return data === true;
+}
+
+export async function updateDriverRideLocation(rideId: string, location: DriverLocationFix) {
+  const { data, error } = await getSupabaseClient().rpc('update_driver_ride_location', {
+    p_ride_id: rideId,
+    p_latitude: location.latitude,
+    p_longitude: location.longitude,
+    p_accuracy_m: location.accuracy_m,
+  });
+  if (error) throw new Error(`Could not share the live ride location: ${error.message}`);
+  if (data !== true) throw new Error('The ride service did not confirm the location update.');
+}
+
+function parsePassengerDriverLocation(row: Record<string, unknown>): PassengerDriverLocation | null {
+  if (
+    typeof row.ride_id !== 'string'
+    || typeof row.latitude !== 'number'
+    || typeof row.longitude !== 'number'
+    || typeof row.accuracy_m !== 'number'
+    || typeof row.updated_at !== 'string'
+    || !Number.isFinite(row.latitude)
+    || !Number.isFinite(row.longitude)
+    || !Number.isFinite(row.accuracy_m)
+    || !Number.isFinite(Date.parse(row.updated_at))
+  ) return null;
+  return {
+    ride_id: row.ride_id,
+    latitude: row.latitude,
+    longitude: row.longitude,
+    accuracy_m: row.accuracy_m,
+    updated_at: row.updated_at,
+  };
+}
+
+export async function loadPassengerDriverLocation(rideId: string): Promise<PassengerDriverLocation | null> {
+  const { data, error } = await getSupabaseClient()
+    .from('driver_ride_locations')
+    .select('ride_id, latitude, longitude, accuracy_m, updated_at')
+    .eq('ride_id', rideId)
+    .maybeSingle();
+  if (error) throw new Error(`Could not load the driver location: ${error.message}`);
+  if (!data) return null;
+  const location = parsePassengerDriverLocation(data);
+  if (!location) throw new Error('The ride service returned an invalid driver location.');
+  return location;
+}
+
+export function subscribeToPassengerDriverLocation(
+  rideId: string,
+  onLocation: (location: PassengerDriverLocation) => void,
+  onError: (message: string) => void,
+) {
+  const supabase = getSupabaseClient();
+  const receiveLocation = (row: Record<string, unknown>) => {
+    const location = parsePassengerDriverLocation(row);
+    if (location) onLocation(location);
+  };
+  const channel = supabase
+    .channel(`passenger-driver-location-${rideId}`)
+    .on(
+      'postgres_changes',
+      {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'driver_ride_locations',
+        filter: `ride_id=eq.${rideId}`,
+      },
+      payload => receiveLocation(payload.new),
+    )
+    .on(
+      'postgres_changes',
+      {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'driver_ride_locations',
+        filter: `ride_id=eq.${rideId}`,
+      },
+      payload => receiveLocation(payload.new),
+    )
+    .subscribe(status => {
+      if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+        onError('Driver location updates could not be connected. Refresh the passenger app to check the map.');
+      }
+    });
+  return () => {
+    void supabase.removeChannel(channel).catch(error => {
+      console.error('Could not stop the passenger driver-location listener:', error);
+    });
+  };
 }
 
 export async function loadPassengerRideStatus(rideId: string): Promise<PassengerRideUpdate | null> {
