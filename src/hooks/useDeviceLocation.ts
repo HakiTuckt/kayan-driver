@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { App } from '@capacitor/app';
 import { Geolocation, type Position } from '@capacitor/geolocation';
 
 function locationError(error: unknown) {
   const code = typeof error === 'object' && error !== null && 'code' in error ? String(error.code) : '';
+  if (code === 'KAYAN_PRECISE_LOCATION_REQUIRED') return 'Precise location is required to use KAYAN Driver. Enable precise location in Android app settings, then retry.';
   if (code === '1' || code === 'OS-PLUG-GLOC-0003') return 'Location permission denied. Allow location in Android App settings (or browser site settings), then retry.';
   if (['OS-PLUG-GLOC-0007', 'OS-PLUG-GLOC-0009', 'OS-PLUG-GLOC-0016'].includes(code)) return 'Location services are off or unavailable. Enable Android Location and Google Location Accuracy, then retry.';
   if (code === '3' || code === 'OS-PLUG-GLOC-0010') return 'No fresh fix yet. Move outdoors, check location services, or configure MuMu’s simulated location. Retry if needed.';
@@ -12,8 +13,8 @@ function locationError(error: unknown) {
   return 'Unable to read device location. Check location permission, Android Location, and Google Play Services, then retry. Browser previews must allow geolocation in this frame.';
 }
 
-export default function useDeviceLocation() {
-  const [enabled, setEnabled] = useState(false);
+export default function useDeviceLocation({ autoStart = false, requirePrecise = false }: { autoStart?: boolean; requirePrecise?: boolean } = {}) {
+  const [enabled, setEnabled] = useState(autoStart);
   const [visible, setVisible] = useState(document.visibilityState === 'visible');
   const [appActive, setAppActive] = useState(!Capacitor.isNativePlatform());
   const [position, setPosition] = useState<Position | null>(null);
@@ -22,7 +23,7 @@ export default function useDeviceLocation() {
   const [waiting, setWaiting] = useState(false);
   const [now, setNow] = useState(Date.now());
   const [attempt, setAttempt] = useState(0);
-  const mayRequest = useRef(false);
+  const mayRequest = useRef(autoStart);
   const foreground = visible && appActive;
 
   useEffect(() => {
@@ -60,6 +61,10 @@ export default function useDeviceLocation() {
             permissions = await Geolocation.requestPermissions({ permissions: ['location'] });
           }
           if (disposed) return;
+          if (requirePrecise && permissions.location !== 'granted') {
+            setPermission('Approximate only');
+            throw { code: 'KAYAN_PRECISE_LOCATION_REQUIRED' };
+          }
           if (permissions.location !== 'granted' && permissions.coarseLocation !== 'granted') {
             setPermission('Denied');
             throw { code: 'OS-PLUG-GLOC-0003' };
@@ -74,6 +79,7 @@ export default function useDeviceLocation() {
           if (disposed) return;
           if (err) {
             setError(locationError(err));
+            setWaiting(false);
             const code = String(err.code || '');
             if (code === '1' || code === 'OS-PLUG-GLOC-0003') { setPermission('Denied'); setEnabled(false); setPosition(null); }
             return;
@@ -101,7 +107,7 @@ export default function useDeviceLocation() {
       disposed = true;
       if (watchId !== undefined) void Geolocation.clearWatch({ id: watchId }).catch(() => {});
     };
-  }, [enabled, foreground, attempt]);
+  }, [enabled, foreground, attempt, requirePrecise]);
 
   useEffect(() => {
     if (!position || !enabled) return;
@@ -111,9 +117,11 @@ export default function useDeviceLocation() {
 
   const age = position ? Math.max(0, Math.floor((now - position.timestamp) / 1000)) : null;
   const fresh = enabled && foreground && !waiting && !error && age !== null && age <= 30;
+  const start = useCallback(() => { mayRequest.current = true; setError(''); setEnabled(true); setAttempt(n => n + 1); }, []);
+  const stop = useCallback(() => { mayRequest.current = false; setEnabled(false); setPosition(null); setError(''); }, []);
   return {
     enabled, foreground, position, permission, waiting, error, age, fresh,
-    start: () => { mayRequest.current = true; setError(''); setEnabled(true); setAttempt(n => n + 1); },
-    stop: () => { mayRequest.current = false; setEnabled(false); setPosition(null); setError(''); },
+    start,
+    stop,
   };
 }

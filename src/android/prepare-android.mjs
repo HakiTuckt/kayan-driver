@@ -5,6 +5,9 @@ import sharp from 'sharp';
 const root = 'android/app/src/main';
 const manifestPath = path.join(root, 'AndroidManifest.xml');
 let manifest = await fs.readFile(manifestPath, 'utf8');
+const googleMapsApiKey = process.env.GOOGLE_MAPS_API_KEY?.trim();
+if (!googleMapsApiKey) throw new Error('Set GOOGLE_MAPS_API_KEY in the build environment before preparing a KAYAN Android app.');
+if (googleMapsApiKey && /[\r\n]/.test(googleMapsApiKey)) throw new Error('GOOGLE_MAPS_API_KEY must be a single line.');
 const permissions = ['ACCESS_COARSE_LOCATION', 'ACCESS_FINE_LOCATION'];
 let declarations = '';
 for (const permission of permissions) {
@@ -13,6 +16,12 @@ for (const permission of permissions) {
 if (!manifest.includes('android.hardware.location.gps')) declarations += '    <uses-feature android:name="android.hardware.location.gps" android:required="false" />\n';
 manifest = manifest.replace(/(<manifest\b[^>]*>)/, `$1\n${declarations}`);
 if (manifest.includes('android.permission.ACCESS_BACKGROUND_LOCATION')) throw new Error('Background location is outside the demo permission scope');
+if (googleMapsApiKey) {
+  manifest = manifest.replace(/<meta-data\b(?=[^>]*android:name=["']com\.google\.android\.geo\.API_KEY["'])[^>]*\/>/g, '');
+  if (!/<application\b/.test(manifest)) throw new Error('Generated Android manifest has no application element.');
+  const escapedMapsKey = googleMapsApiKey.replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' })[character] ?? character);
+  manifest = manifest.replace(/(<application\b[^>]*>)/, `$1\n    <meta-data android:name="com.google.android.geo.API_KEY" android:value="${escapedMapsKey}" />`);
+}
 await fs.writeFile(manifestPath, manifest);
 
 const res = path.join(root, 'res');

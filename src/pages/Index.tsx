@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { ArrowRight, CarFront, CheckCircle2, ChevronRight, Clock3, Leaf, MapPin, Menu, ShieldCheck, Sparkles, UserRound, Wallet, X } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { ArrowRight, CarFront, CheckCircle2, ChevronRight, Clock3, Leaf, LocateFixed, MapPin, Menu, ShieldCheck, Sparkles, UserRound, Wallet, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
@@ -11,12 +11,44 @@ import { Link } from 'react-router-dom';
 import ThemeSelect from '@/components/ThemeSelect';
 import KayanLogo from '@/components/KayanLogo';
 import PassengerSaved, { type SavedPlace } from '@/components/PassengerSaved';
+import useDeviceLocation from '@/hooks/useDeviceLocation';
 
 type View = 'book' | 'activity';
 type Modal = 'welcome' | 'support' | 'account' | 'locations' | 'payments' | null;
 const Brand = () => <div className="flex items-center gap-2.5"><img src="/assets/kayan-eagle.png" alt="KAYAN eagle" className="h-11 w-11 rounded-xl object-cover"/><div><span className="display-font text-2xl font-extrabold tracking-[.2em] text-[#fff3df]">KAYAN</span><span className="mt-0.5 block text-[8px] font-semibold uppercase tracking-[.34em] text-[#e49656]">A better way to ride</span></div></div>;
 
 export default function Index() {
+  const locationAccess = useDeviceLocation();
+  const { fresh, position, waiting, error, start, stop } = locationAccess;
+  const [locationGranted, setLocationGranted] = useState(false);
+  const [initialPickupCoordinate, setInitialPickupCoordinate] = useState<{ lat: number; lng: number } | null>(null);
+
+  useEffect(() => {
+    if (!fresh || !position) return;
+    setInitialPickupCoordinate({ lat: position.coords.latitude, lng: position.coords.longitude });
+    stop();
+    setLocationGranted(true);
+  }, [fresh, position, stop]);
+
+  return <>
+    <Dialog open={!locationGranted} onOpenChange={() => {}}>
+      <DialogContent className="max-w-md rounded-3xl p-7 [&>button:last-child]:hidden">
+        <DialogHeader>
+          <span className="mx-auto mb-2 flex h-14 w-14 items-center justify-center rounded-2xl bg-secondary text-primary"><LocateFixed size={26}/></span>
+          <DialogTitle className="text-center text-2xl">Location access required</DialogTitle>
+          <DialogDescription className="text-center leading-6">Please allow location services to use KAYAN. We use your device location to set your pickup point and show it on the map. It is not sent to KAYAN.</DialogDescription>
+        </DialogHeader>
+        {error && <p role="alert" className="rounded-xl border border-destructive/30 bg-background p-3 text-center text-xs leading-5 text-destructive">{error}</p>}
+        {waiting && <p role="status" className="text-center text-xs text-muted-foreground">Waiting for a fresh location fix… Please keep location services enabled.</p>}
+        <Button disabled={waiting && !error} className="kayan-action w-full" onClick={start}>{error ? 'Retry location access' : waiting ? 'Waiting for location…' : 'Allow location and continue'}</Button>
+        <p className="text-center text-[10px] leading-5 text-muted-foreground">Your location permission is required to continue. If you previously denied access, enable it in your browser or device settings and retry.</p>
+      </DialogContent>
+    </Dialog>
+    {locationGranted && <PassengerApp initialPickupCoordinate={initialPickupCoordinate}/>}
+  </>;
+}
+
+function PassengerApp({ initialPickupCoordinate }: { initialPickupCoordinate: { lat: number; lng: number } | null }) {
   const [view, setView] = useState<View>('book');
   const [modal, setModal] = useState<Modal>(null);
   const [mobileMenu, setMobileMenu] = useState(false);
@@ -29,6 +61,39 @@ export default function Index() {
   const [savedPlaces, setSavedPlaces] = useState<SavedPlace[]>([]);
   const [savedMethods, setSavedMethods] = useState<string[]>(['Cash']);
   const [defaultPayment, setDefaultPayment] = useState('Cash');
+  const [pickupAddress, setPickupAddress] = useState('Rhodes Park, Lusaka');
+  const pickupLocation = useDeviceLocation();
+  const { fresh: pickupFixFresh, position: pickupPosition, error: pickupLocationError, start: startPickupLocation, stop: stopPickupLocation } = pickupLocation;
+  const [gpsPickupLoading, setGpsPickupLoading] = useState(false);
+  const [gpsPickupCoordinate, setGpsPickupCoordinate] = useState<{ lat: number; lng: number } | null>(initialPickupCoordinate);
+  const mapDestination = activeRide?.destination || destination;
+  const destinationCoordinate = useMemo(() => mapDestination ? { lat: mapDestination.lat, lng: mapDestination.lng } : null, [mapDestination]);
+  const pickupCoordinate = activeRide?.pickupCoordinate || gpsPickupCoordinate;
+  const mapPickupAddress = activeRide?.pickup || pickupAddress;
+  useEffect(() => {
+    if (!gpsPickupLoading || !pickupFixFresh || !pickupPosition) return;
+    setGpsPickupCoordinate({ lat: pickupPosition.coords.latitude, lng: pickupPosition.coords.longitude });
+    setGpsPickupLoading(false);
+    stopPickupLocation();
+  }, [gpsPickupLoading, pickupFixFresh, pickupPosition, stopPickupLocation]);
+  useEffect(() => {
+    if (gpsPickupLoading && pickupLocationError) setGpsPickupLoading(false);
+  }, [gpsPickupLoading, pickupLocationError]);
+  const enableGpsPickup = () => {
+    if (gpsPickupLoading) {
+      stopPickupLocation();
+      setGpsPickupLoading(false);
+      return;
+    }
+    setGpsPickupCoordinate(null);
+    setGpsPickupLoading(true);
+    startPickupLocation();
+  };
+  const useTypedPickup = () => {
+    stopPickupLocation();
+    setGpsPickupLoading(false);
+    setGpsPickupCoordinate(null);
+  };
   const saveHome = (place: Destination) => setSavedPlaces(previous => [...previous.filter(p => p.label !== 'Home'), { label: 'Home', destination: place }]);
   const navigate = (v: View) => { setView(v); setMobileMenu(false); };
   const finish = (cancelled: boolean) => {
@@ -57,8 +122,8 @@ export default function Index() {
         <div className="mb-6 flex items-end justify-between"><div><p className="mb-2 text-[10px] font-semibold uppercase tracking-[.2em] text-muted-foreground">YOUR CITY. YOUR JOURNEY.</p><h1 className="text-2xl font-extrabold tracking-tight sm:text-[30px]">{view === 'book' ? <>Good journeys start with <span className="text-primary">KAYAN.</span></> : 'Every journey, in one place.'}</h1><p className="mt-2 text-xs text-muted-foreground">{view === 'book' ? 'Wherever life takes you, let’s get there better.' : 'Your demo rides from this browser session.'}</p></div><div className="hidden items-center gap-2 pb-1 text-[10px] font-semibold text-muted-foreground xl:flex"><ShieldCheck size={16} className="text-primary"/> Professional by design</div></div>
         {view === 'book' ? <>
           <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_365px] 2xl:grid-cols-[minmax(0,1fr)_400px]">
-            <div className="min-w-0"><KayanMap stage={activeRide ? tripStage : null} hasRoute={!!destination || !!activeRide} destination={(activeRide?.destination || destination)?.name || ''}/></div>
-            <section className="rounded-2xl border border-border bg-card p-5 sm:p-6">{activeRide ? <TripPanel key={activeRide.id} ride={activeRide} stage={tripStage} onStage={setTripStage} onFinish={finish} onSupport={() => setModal('support')}/> : <BookingPanel destination={destination} onDestination={setDestination} savedHome={savedPlaces.find(p => p.label === 'Home')?.destination || null} onSaveHome={saveHome} defaultPayment={defaultPayment} onSavedLocations={() => setModal('locations')} onSavedPayments={() => setModal('payments')} onBook={ride => { setTripStage(0); setActiveRide(ride); }}/>}</section>
+            <div className="min-w-0"><KayanMap stage={activeRide ? tripStage : null} hasRoute={!!destination || !!activeRide} destination={mapDestination?.name || ''} destinationCoordinate={destinationCoordinate} pickupCoordinate={pickupCoordinate} pickupAddress={mapPickupAddress}/></div>
+            <section className="rounded-2xl border border-border bg-card p-5 sm:p-6">{activeRide ? <TripPanel key={activeRide.id} ride={activeRide} stage={tripStage} onStage={setTripStage} onFinish={finish} onSupport={() => setModal('support')}/> : <BookingPanel destination={destination} onDestination={setDestination} savedHome={savedPlaces.find(p => p.label === 'Home')?.destination || null} onSaveHome={saveHome} defaultPayment={defaultPayment} onSavedLocations={() => setModal('locations')} onSavedPayments={() => setModal('payments')} gpsPickupCoordinate={gpsPickupCoordinate} gpsPickupLoading={gpsPickupLoading} gpsPickupError={pickupLocationError} onUseGpsPickup={enableGpsPickup} onUseManualPickup={useTypedPickup} pickup={pickupAddress} onPickupChange={setPickupAddress} onBook={ride => { setTripStage(0); setActiveRide(ride); }}/>}</section>
           </div>
           <div className="mt-5 grid gap-4 md:grid-cols-[1fr_1fr_1fr]">
             <div className="flex items-center gap-3 rounded-xl border border-border bg-card/70 p-4"><div className="rounded-xl bg-secondary p-2.5"><Sparkles size={20}/></div><div><h3 className="text-xs font-bold">A higher standard</h3><p className="mt-1 text-[10px] text-muted-foreground">Clean cars. A comfortable journey.</p></div></div>
@@ -74,7 +139,7 @@ export default function Index() {
       {modal === 'welcome' && <div className="grid sm:grid-cols-2"><img src="/assets/kayan-driver.png" alt="Illustrative clean taxi and professional driver in Lusaka" className="h-56 w-full object-cover sm:h-full"/><div className="p-7"><DialogHeader><p className="mb-3 text-[10px] font-bold uppercase tracking-[.2em] text-primary">Introducing KAYAN</p><DialogTitle className="text-3xl font-extrabold leading-tight">A better ride.<br/>A brighter journey.</DialogTitle><DialogDescription className="pt-3 leading-relaxed">Our vision is simple: raise the standard of everyday taxi travel in Zambia, for passengers and drivers alike.</DialogDescription></DialogHeader><div className="my-6 space-y-3">{['Clean, well-maintained vehicles', 'Courteous, professional drivers', 'Clear fares before you ride'].map(t => <p key={t} className="flex items-center gap-2 text-xs font-semibold"><CheckCircle2 size={16} className="text-primary"/>{t}</p>)}</div><Button onClick={() => { setModal(null); navigate('book'); }} className="kayan-action w-full">Explore the passenger app <ArrowRight size={16} className="ml-2"/></Button><p className="mt-3 text-[10px] leading-relaxed text-muted-foreground">Illustrative brand imagery. This preview does not represent an operational fleet.</p></div></div>}
       {(modal === 'locations' || modal === 'payments') && <><DialogHeader><span className="mb-3 inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-secondary text-primary">{modal === 'locations' ? <MapPin size={24}/> : <Wallet size={24}/>}</span><DialogTitle className="text-2xl">{modal === 'locations' ? 'Saved locations' : 'Saved payment methods'}</DialogTitle><DialogDescription>Your everyday preferences, ready for your next demo ride.</DialogDescription></DialogHeader><PassengerSaved section={modal} places={savedPlaces} onPlaces={setSavedPlaces} methods={savedMethods} onMethods={setSavedMethods} defaultMethod={defaultPayment} onDefault={setDefaultPayment} activeRide={!!activeRide} onChoose={place => { setDestination(place); setView('book'); setModal(null); }}/></>}
       {modal === 'account' && <><DialogHeader><span className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-secondary"><UserRound size={24}/></span><DialogTitle className="text-2xl">Welcome, passenger.</DialogTitle><DialogDescription>You’re exploring KAYAN as a guest. Account sign-in is not connected in this prototype.</DialogDescription></DialogHeader><div className="rounded-xl bg-secondary p-4 text-sm leading-relaxed">Your demo rides, saved locations and payment type preferences stay in this page session only. Reload clears them. No personal account or payment credentials are collected.</div><Link to="/website" className="kayan-action flex items-center justify-center">Explore registration demo</Link><Button variant="outline" className="h-11 rounded-xl" onClick={() => setModal(null)}>Continue as guest</Button></>}
-      {modal === 'support' && <><DialogHeader><span className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-accent text-primary"><ShieldCheck size={24}/></span><DialogTitle className="text-2xl">Safety & support</DialogTitle><DialogDescription>Know what to expect before you ride.</DialogDescription></DialogHeader><div className="rounded-xl border border-[#e8c7b3] bg-accent p-4"><h3 className="text-xs font-bold">This is not an emergency service.</h3><p className="mt-2 text-xs leading-relaxed text-muted-foreground">No live support team or safety monitoring is connected. In immediate danger, contact local emergency services directly. Do not rely on this prototype for help.</p></div><Accordion type="single" collapsible className="w-full"><AccordionItem value="safety"><AccordionTrigger className="text-sm">Before getting into a taxi</AccordionTrigger><AccordionContent className="text-xs leading-relaxed text-muted-foreground">Confirm the driver, vehicle, and plate match your booking. Share trip details with someone you trust. Only give your pickup code to the matched driver and wear your seatbelt.</AccordionContent></AccordionItem><AccordionItem value="fares"><AccordionTrigger className="text-sm">How do demo fares work?</AccordionTrigger><AccordionContent className="text-xs leading-relaxed text-muted-foreground">Prices and travel times are illustrative, not live quotations. Comfort adds K30 in this preview. Cash and mobile money are preferences only; no money is collected.</AccordionContent></AccordionItem><AccordionItem value="contact"><AccordionTrigger className="text-sm">Contacting KAYAN</AccordionTrigger><AccordionContent className="text-xs leading-relaxed text-muted-foreground">Official KAYAN support details have not been supplied yet. No message can be sent from this prototype. A staffed support channel must be configured before real rides launch.</AccordionContent></AccordionItem><AccordionItem value="privacy"><AccordionTrigger className="text-sm">Your privacy in this preview</AccordionTrigger><AccordionContent className="text-xs leading-relaxed text-muted-foreground">Device location is requested only when you enable it on the map. Tracking stops when the app is hidden or you stop it. Location is not saved or sent to KAYAN. OpenStreetMap tile requests expose the viewed area and IP to its provider. Ride data stays in this page’s memory and clears on refresh. Sharing copies demo details to your clipboard; it does not create a live tracking link.</AccordionContent></AccordionItem></Accordion><Button variant="outline" className="h-11 rounded-xl" onClick={() => setModal(null)}>Back to the app</Button></>}
+      {modal === 'support' && <><DialogHeader><span className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-accent text-primary"><ShieldCheck size={24}/></span><DialogTitle className="text-2xl">Safety & support</DialogTitle><DialogDescription>Know what to expect before you ride.</DialogDescription></DialogHeader><div className="rounded-xl border border-[#e8c7b3] bg-accent p-4"><h3 className="text-xs font-bold">This is not an emergency service.</h3><p className="mt-2 text-xs leading-relaxed text-muted-foreground">No live support team or safety monitoring is connected. In immediate danger, contact local emergency services directly. Do not rely on this prototype for help.</p></div><Accordion type="single" collapsible className="w-full"><AccordionItem value="safety"><AccordionTrigger className="text-sm">Before getting into a taxi</AccordionTrigger><AccordionContent className="text-xs leading-relaxed text-muted-foreground">Confirm the driver, vehicle, and plate match your booking. Share trip details with someone you trust. Only give your pickup code to the matched driver and wear your seatbelt.</AccordionContent></AccordionItem><AccordionItem value="fares"><AccordionTrigger className="text-sm">How do demo fares work?</AccordionTrigger><AccordionContent className="text-xs leading-relaxed text-muted-foreground">Prices and travel times are illustrative, not live quotations. Comfort adds K30 in this preview. Cash and mobile money are preferences only; no money is collected.</AccordionContent></AccordionItem><AccordionItem value="contact"><AccordionTrigger className="text-sm">Contacting KAYAN</AccordionTrigger><AccordionContent className="text-xs leading-relaxed text-muted-foreground">Official KAYAN support details have not been supplied yet. No message can be sent from this prototype. A staffed support channel must be configured before real rides launch.</AccordionContent></AccordionItem><AccordionItem value="privacy"><AccordionTrigger className="text-sm">Your privacy in this preview</AccordionTrigger><AccordionContent className="text-xs leading-relaxed text-muted-foreground">Location permission is required to open the Passenger app. The initial fix sets your pickup; location is not saved or sent to KAYAN. You can switch to a typed pickup or request a fresh GPS pickup. Google receives map requests and the map area viewed; it receives device location when used to show the pickup marker. Ride data stays in this page’s memory and clears on refresh. Sharing copies demo details to your clipboard; it does not create a live tracking link.</AccordionContent></AccordionItem></Accordion><Button variant="outline" className="h-11 rounded-xl" onClick={() => setModal(null)}>Back to the app</Button></>}
     </DialogContent></Dialog>
     <Dialog open={!!selectedRide} onOpenChange={open => { if (!open) setSelectedRide(null); }}><DialogContent className="max-w-md rounded-3xl p-7">{selectedRide && <><DialogHeader><DialogTitle className="text-2xl">Journey details</DialogTitle><DialogDescription>{selectedRide.id} · {selectedRide.status}</DialogDescription></DialogHeader><div className="space-y-4 rounded-xl bg-secondary p-4"><div><p className="text-[10px] text-muted-foreground">From</p><p className="text-sm font-semibold">{selectedRide.pickup}</p></div><div><p className="text-[10px] text-muted-foreground">To</p><p className="text-sm font-semibold">{selectedRide.destination.name}</p></div><div className="flex justify-between border-t pt-3"><span className="text-xs">{selectedRide.payment} · Not charged</span><span className="font-bold">K{selectedRide.price}</span></div></div>{selectedRide.status === 'Completed' && <div><p className="mb-3 text-sm font-semibold">How was the demo experience?</p><div className="flex gap-2">{[1,2,3,4,5].map(n => <button key={n} onClick={() => setRating(n)} aria-label={`Rate ${n} out of 5`} aria-pressed={rating === n} className={`h-10 w-10 rounded-xl border text-sm font-bold ${rating >= n ? 'border-primary bg-primary text-white' : 'bg-secondary'}`}>{n}</button>)}</div><p className="mt-2 text-[10px] text-muted-foreground">Preview feedback only · not sent to a driver.</p><Button disabled={!rating} className="kayan-action mt-4 w-full" onClick={() => { toast.success('Thanks for trying the rating interaction. No feedback was submitted.'); setSelectedRide(null); }}>Finish feedback preview</Button></div>}</>}</DialogContent></Dialog>
   </div>;

@@ -7,16 +7,18 @@
 - Passenger package remains **com.kayan.passenger.demo**. Both APKs can be installed side by side.
 - Driver configuration: `capacitor.driver.config.json`
 - Driver web build: `build:driver` package script (Vite driver mode), output `dist-driver`.
-- Driver builds open the driver experience at `/`; the shared web preview exposes it at `/driver`. Passenger booking and registration routes are not available in the driver build.
+- The Driver APK uses the native Android Google Maps SDK through Capacitor. The interactive Driver experience is also available in browser previews, which use Google Maps JavaScript API.
 
 ## Build an APK using GitHub
 
-1. Push this project to a GitHub repository with Actions enabled.
-2. Open **Actions → Build KAYAN Driver Android demo → Run workflow** and select the desired branch.
-3. After a successful run, download **KAYAN-Driver-Android-Demo-APK** from the run’s artifacts and unzip it.
-4. Transfer `app-debug.apk` to an Android test device. Allow installation from that source only if you trust it, then install the APK.
+1. In Google Cloud, enable **Maps SDK for Android** and create a key restricted to that API. The Driver package ID is `com.kayan.driver.demo`. Android app restrictions require the matching signing certificate SHA-1; these workflows use CI debug signing that can change between runners, so app restrictions need a stable signing certificate to work reliably.
+2. Enable **Maps JavaScript API** and create a separate browser key restricted to that API and the HTTPS referrers used for your browser preview/deployment. This key is visible in browser code; referrer and API restrictions are required.
+3. Push this project to a GitHub repository with Actions enabled. In **Settings → Secrets and variables → Actions**, create `GOOGLE_MAPS_API_KEY` for Android and `GOOGLE_MAPS_BROWSER_API_KEY` for browser builds. Never commit either key or post it in chat.
+4. Open **Actions → Build KAYAN Driver Android demo → Run workflow** and select the desired branch.
+5. After a successful run, download **KAYAN-Driver-Android-Demo-APK** from the run’s artifacts and unzip it.
+6. Transfer `app-debug.apk` to an Android test device. Allow installation from that source only if you trust it, then install the APK.
 
-The isolated runner builds driver mode, replaces the runner’s Capacitor config with the driver config, generates Android, and compiles a debug APK. It does not change the committed passenger configuration or the existing passenger workflow. Node 22, Java 21, Android SDK, and Capacitor 7 follow the passenger packaging setup. This is a debug/test build, not a signed store release. No signing credentials are needed. Artifacts expire after 14 days.
+The isolated runner builds driver mode, replaces the runner’s Capacitor config with the driver config, builds the browser preview with the restricted browser key, installs native Google Maps, injects the Android key into the generated manifest, and compiles a debug APK. It does not change the committed passenger configuration or passenger workflow. Node 22, Java 21, Android SDK, and Capacitor 7 follow the passenger packaging setup. This is a debug/test build, not a signed store release. The Android key is visible in the APK and the browser key is visible in web code, so API restrictions are essential. See [GPS_ANDROID_TESTING.md](GPS_ANDROID_TESTING.md) for setup and signing limitations. Artifacts expire after 14 days.
 
 **No Android APK has been compiled or device-tested in this editing session.** The workflow must complete in GitHub to produce the artifact. Do not describe the demo as Android-validated until that run and device checks pass.
 
@@ -26,7 +28,7 @@ First launch asks for fictional contact and vehicle information and sample docum
 
 Light/Dark/System selection uses the independent `kayan-driver-theme` device preference. The passenger theme key is unchanged. **Restart pre-registration** clears the introduction flag and session data without changing the theme.
 
-All requests are locally generated. Pickup and trip progression are manual. The map is now a real Leaflet/OpenStreetMap map with optional foreground device location, an accuracy circle and fix age. Device location is separate from trip simulation. Chat replies are scripted and call connection is visual only (no audio, telephone link or microphone). See [GPS_ANDROID_TESTING.md](GPS_ANDROID_TESTING.md) for permissions, privacy and GPS acceptance checks. Completed fares form illustrative gross totals; actual payable balance is zero. No real dispatch, payments, wallet, payouts, uploads, document review, or approval occur. Subscription pricing and rewards remain **unfinalized**; the demo defines no plans, prices, or rewards.
+All requests are locally generated. Pickup and trip progression are manual. The Android driver map uses native Google Maps centered on Lusaka. Device location is shown on the map after the driver grants Android location permission; coordinates are not displayed in the UI or shared with KAYAN. Google receives device location for the map indicator. Browser previews use Google Maps JavaScript API with optional browser location. Device location is separate from trip simulation. Chat replies are scripted and call connection is visual only (no audio, telephone link or microphone). See [GPS_ANDROID_TESTING.md](GPS_ANDROID_TESTING.md) for permissions, privacy and GPS acceptance checks. Completed fares form illustrative gross totals; actual payable balance is zero. No real dispatch, payments, wallet, payouts, uploads, document review, or approval occur. Subscription pricing and rewards remain **unfinalized**; the demo defines no plans, prices, or rewards.
 
 ## Device acceptance checklist
 
@@ -38,6 +40,6 @@ All requests are locally generated. Pickup and trip progression are manual. The 
 - Test chat, call connection/end, trip cancellation, earnings and history. Only completed trips contribute fares.
 - Confirm the online toggle is locked during a trip and offline removes pending requests.
 - Restart pre-registration and verify all session data is cleared.
-- Check narrow screens, keyboard interaction, Android back behavior, and no payment/upload prompts. Foreground location permission should appear only after explicitly enabling device location. Confirm eagle launcher icons on both apps.
+- Check narrow screens, keyboard interaction, Android back behavior, and no payment/upload prompts. On a fresh Android Driver launch, confirm the precise-location gate is shown before the Driver experience and Google Map; location appears only after permission and a fresh fix. Confirm eagle launcher icons on both apps.
 
 Google Fonts are optional external presentation resources; app simulation does not need a backend. Without network access, system font fallbacks are used. Production dispatch, approval, subscriptions, payments, signing, and store publication are outside this demo workflow.

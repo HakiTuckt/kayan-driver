@@ -33,6 +33,8 @@ jobs:
 
       - name: Build standalone driver web app
         run: npm run build:driver
+        env:
+          VITE_GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_BROWSER_API_KEY }}
 
       - name: Select isolated driver packaging configuration
         run: |
@@ -47,8 +49,16 @@ jobs:
           npx --no-install cap add android
           npx --no-install cap sync android
 
+      - name: Verify Google Maps key is configured
+        run: test -n "$GOOGLE_MAPS_API_KEY"
+        env:
+          GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
+
       - name: Apply foreground location permissions and KAYAN launcher icons
         run: node src/android/prepare-android.mjs
+        env:
+          GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
+          KAYAN_APP_VARIANT: driver
 
       - name: Compile driver debug APK
         working-directory: android

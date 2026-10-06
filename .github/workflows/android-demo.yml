@@ -33,6 +33,8 @@ jobs:
 
       - name: Build web app
         run: npm run build
+        env:
+          VITE_GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_BROWSER_API_KEY }}
 
       - name: Install isolated Android packaging dependencies
         run: npm install --no-save --package-lock=false @capacitor/core@7 @capacitor/cli@7 @capacitor/android@7
@@ -42,8 +44,15 @@ jobs:
           npx --no-install cap add android
           npx --no-install cap sync android
 
+      - name: Verify Google Maps Android key is configured
+        run: test -n "$GOOGLE_MAPS_API_KEY"
+        env:
+          GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
+
       - name: Apply foreground location permissions and KAYAN launcher icons
         run: node src/android/prepare-android.mjs
+        env:
+          GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
 
       - name: Compile debug APK
         working-directory: android

@@ -28,14 +28,6 @@
     --forest: #062d24;
     --copper: #d87932;
     --cream: #fff3df;
-    --map-base: #d9e5cf;
-    --map-grid: #b7cbb1;
-    --map-block: #cedec3;
-    --map-park: #b4cdaa;
-    --map-street: #acbba2;
-    --map-road: #faf5e5;
-    --map-label: #3d5c43;
-    --map-road-label: #4b6250;
   }
   .dark {
     --background: 162 37% 10%;
@@ -52,14 +44,6 @@
     --accent-foreground: 42 65% 93%;
     --border: 156 18% 30%;
     --input: 156 18% 30%;
-    --map-base: #305342;
-    --map-grid: #436551;
-    --map-block: #365a45;
-    --map-park: #42674d;
-    --map-street: #638069;
-    --map-road: #bac4a0;
-    --map-label: #e0e8d2;
-    --map-road-label: #eff1df;
   }
   * { @apply border-border; }
   body { @apply bg-background text-foreground; font-family: 'DM Sans', sans-serif; }
@@ -70,9 +54,24 @@
 @layer components {
   .kayan-action { @apply h-12 rounded-xl bg-primary px-5 font-bold text-white shadow-none transition-colors hover:bg-[#bf6427]; }
   .nav-item { @apply flex w-full items-center gap-3 rounded-xl px-4 py-3.5 text-sm font-medium transition-colors; }
-  .map-control { @apply flex h-10 w-10 items-center justify-center rounded-xl border border-white/15 bg-[#123d31] text-[#fff3df] shadow-lg hover:bg-[#245440]; }
 }
-.map-label { font-family: 'DM Sans', sans-serif; letter-spacing: 2px; }
 @keyframes enter { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
 .enter { animation: enter .4s ease-out; }
-@media (prefers-reduced-motion: reduce) { .enter { animation: none; } }
+@keyframes availability-pulse {
+  0%, 100% { background-color: hsl(var(--input)); box-shadow: 0 0 0 0 rgb(216 121 50 / 0%); }
+  50% { background-color: #bf6427; box-shadow: 0 0 0 5px rgb(216 121 50 / 18%); }
+}
+#driver-online[data-state="unchecked"]:not(:disabled) { animation: availability-pulse 2s ease-in-out infinite; }
+@keyframes availability-cta-pulse {
+  0%, 100% { background-color: #d87932; box-shadow: 0 0 0 0 rgb(216 121 50 / 0%); }
+  50% { background-color: #bf6427; box-shadow: 0 0 0 6px rgb(216 121 50 / 18%); }
+}
+.availability-cta-pulse { animation: availability-cta-pulse 2s ease-in-out infinite; }
+html.native-google-map,
+body.native-google-map,
+#root.native-google-map { background: transparent !important; }
+@media (prefers-reduced-motion: reduce) {
+  .enter { animation: none; }
+  #driver-online[data-state="unchecked"]:not(:disabled) { animation: none; }
+  .availability-cta-pulse { animation: none; }
+}
