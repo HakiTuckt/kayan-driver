@@ -660,6 +660,9 @@ function NativeGoogleKayanMap({ hasRoute, destination, stage = null, immersive =
       disposed = true;
       markerRevision.current += 1;
       routeRevision.current += 1;
+      markerId.current = null;
+      routeIds.current = [];
+      lastRouteTarget.current = null;
       const instance = map.current;
       map.current = null;
       if (instance) void instance.destroy().catch(error => console.error('Could not destroy native Google Map:', error));
