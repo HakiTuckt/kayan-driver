@@ -41,6 +41,27 @@ jobs:
           GOOGLE_MAPS_ANDROID_API_KEY: ${{ secrets.GOOGLE_MAPS_ANDROID_API_KEY }}
           ANDROID_DEBUG_KEYSTORE_BASE64: ${{ secrets.ANDROID_DEBUG_KEYSTORE_BASE64 }}
 
+      - name: Validate optional Firebase configuration
+        id: firebase_config
+        run: |
+          config_path="$RUNNER_TEMP/google-services.json"
+          enabled=false
+          if [ -z "$FIREBASE_ANDROID_CONFIG_BASE64" ]; then
+            echo "::warning::FIREBASE_ANDROID_CONFIG_BASE64 is not set; push notifications will be disabled in this APK."
+          elif ! printf '%s' "$FIREBASE_ANDROID_CONFIG_BASE64" | base64 --decode > "$config_path"; then
+            rm -f "$config_path"
+            echo "::warning::FIREBASE_ANDROID_CONFIG_BASE64 is invalid base64; push notifications will be disabled in this APK."
+          elif ! node --input-type=module -e "import fs from 'node:fs'; const config = JSON.parse(fs.readFileSync(process.env.CONFIG_PATH, 'utf8')); if (!config.client?.some(item => item.client_info?.android_client_info?.package_name === 'com.kayan.driver.demo')) throw new Error('Firebase client package mismatch');" >/dev/null 2>&1; then
+            rm -f "$config_path"
+            echo "::warning::Firebase configuration is invalid or does not match com.kayan.driver.demo; push notifications will be disabled in this APK."
+          else
+            enabled=true
+          fi
+          echo "enabled=$enabled" >> "$GITHUB_OUTPUT"
+        env:
+          FIREBASE_ANDROID_CONFIG_BASE64: ${{ secrets.FIREBASE_ANDROID_CONFIG_BASE64 }}
+          CONFIG_PATH: ${{ runner.temp }}/google-services.json
+
       - name: Install stable debug signing key
         run: |
           mkdir -p "$HOME/.android"
@@ -57,6 +78,7 @@ jobs:
           VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
           VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
           VITE_ENABLE_LIVE_DISPATCH: ${{ vars.VITE_ENABLE_LIVE_DISPATCH }}
+          VITE_ENABLE_DRIVER_PUSH_NOTIFICATIONS: ${{ steps.firebase_config.outputs.enabled }}
 
       - name: Select isolated driver packaging configuration
         run: |
@@ -73,17 +95,13 @@ jobs:
 
       - name: Configure Firebase for Android push notifications
         run: |
-          if [ -z "$FIREBASE_ANDROID_CONFIG_BASE64" ]; then
-            echo "::warning::FIREBASE_ANDROID_CONFIG_BASE64 is not set; this APK will not register for push notifications."
-          elif ! printf '%s' "$FIREBASE_ANDROID_CONFIG_BASE64" | base64 --decode > android/app/google-services.json; then
-            rm -f android/app/google-services.json
-            echo "::warning::FIREBASE_ANDROID_CONFIG_BASE64 is invalid base64; this APK will not register for push notifications."
-          elif ! node --input-type=module -e "import fs from 'node:fs'; const config = JSON.parse(fs.readFileSync('android/app/google-services.json', 'utf8')); if (!config.client?.some(item => item.client_info?.android_client_info?.package_name === 'com.kayan.driver.demo')) throw new Error('No Firebase Android client matches com.kayan.driver.demo');"; then
-            rm -f android/app/google-services.json
-            echo "::warning::Firebase configuration is invalid or does not match com.kayan.driver.demo; this APK will not register for push notifications."
+          if [ "$FIREBASE_PUSH_ENABLED" = 'true' ]; then
+            cp "$RUNNER_TEMP/google-services.json" android/app/google-services.json
+          else
+            echo "Push registration remains disabled; live offers are available while the driver app is open."
           fi
         env:
-          FIREBASE_ANDROID_CONFIG_BASE64: ${{ secrets.FIREBASE_ANDROID_CONFIG_BASE64 }}
+          FIREBASE_PUSH_ENABLED: ${{ steps.firebase_config.outputs.enabled }}
 
       - name: Apply foreground location permissions and KAYAN launcher icons
         run: node src/android/prepare-android.mjs

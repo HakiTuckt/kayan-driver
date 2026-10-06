@@ -297,6 +297,8 @@ export default function Driver() {
           } catch (error) {
             toast.error(`Push setup failed; foreground offers can still arrive: ${error instanceof Error ? error.message : 'Unknown push error.'}`);
           }
+        } else if (isOnline && pushController.current) {
+          toast.warning('Push notifications are not configured in this build. Keep the app open to receive live offers.');
         }
         if (!isOnline && request?.offerId) {
           try {

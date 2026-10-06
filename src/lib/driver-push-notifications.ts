@@ -12,7 +12,11 @@ function readOfferId(data: Record<string, unknown> | undefined) {
 }
 
 export async function configureDriverPushNotifications(handlers: PushHandlers) {
-  if (!Capacitor.isNativePlatform() || Capacitor.getPlatform() !== 'android') {
+  if (
+    !Capacitor.isNativePlatform()
+    || Capacitor.getPlatform() !== 'android'
+    || import.meta.env.VITE_ENABLE_DRIVER_PUSH_NOTIFICATIONS !== 'true'
+  ) {
     return {
       supported: false,
       register: async () => false,
