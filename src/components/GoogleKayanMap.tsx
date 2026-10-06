@@ -618,10 +618,10 @@ function NativeGoogleKayanMap({ hasRoute, destination, stage = null, immersive =
     let disposed = false;
     setMapReady(false);
     const backgroundOverrides: Array<{ element: HTMLElement; backgroundColor: string }> = [];
+    // Android renders the native map behind the WebView, so every DOM ancestor must be transparent.
     for (let ancestor: HTMLElement | null = mapHost; ancestor; ancestor = ancestor.parentElement) {
       backgroundOverrides.push({ element: ancestor, backgroundColor: ancestor.style.backgroundColor });
       ancestor.style.backgroundColor = 'transparent';
-      if (ancestor.classList.contains('native-google-map-section')) break;
     }
 
     const element = document.createElement('capacitor-google-map');
