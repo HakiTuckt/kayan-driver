@@ -73,10 +73,14 @@ jobs:
 
       - name: Configure Firebase for Android push notifications
         run: |
-          if [ -n "$FIREBASE_ANDROID_CONFIG_BASE64" ]; then
-            printf '%s' "$FIREBASE_ANDROID_CONFIG_BASE64" | base64 --decode > android/app/google-services.json
-          else
+          if [ -z "$FIREBASE_ANDROID_CONFIG_BASE64" ]; then
             echo "::warning::FIREBASE_ANDROID_CONFIG_BASE64 is not set; this APK will not register for push notifications."
+          elif ! printf '%s' "$FIREBASE_ANDROID_CONFIG_BASE64" | base64 --decode > android/app/google-services.json; then
+            rm -f android/app/google-services.json
+            echo "::warning::FIREBASE_ANDROID_CONFIG_BASE64 is invalid base64; this APK will not register for push notifications."
+          elif ! node --input-type=module -e "import fs from 'node:fs'; const config = JSON.parse(fs.readFileSync('android/app/google-services.json', 'utf8')); if (!config.client?.some(item => item.client_info?.android_client_info?.package_name === 'com.kayan.driver.demo')) throw new Error('No Firebase Android client matches com.kayan.driver.demo');"; then
+            rm -f android/app/google-services.json
+            echo "::warning::Firebase configuration is invalid or does not match com.kayan.driver.demo; this APK will not register for push notifications."
           fi
         env:
           FIREBASE_ANDROID_CONFIG_BASE64: ${{ secrets.FIREBASE_ANDROID_CONFIG_BASE64 }}
