@@ -1,2 +1,5 @@
 [functions.whatsapp-send-otp]
 verify_jwt = false
+
+[functions.create-ride-request]
+verify_jwt = true

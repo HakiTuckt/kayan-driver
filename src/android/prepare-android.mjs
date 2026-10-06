@@ -31,6 +31,46 @@ if (androidMapsKey) {
 }
 await fs.writeFile(manifestPath, manifest);
 
+const firebaseConfigPath = path.join('android', 'app', 'google-services.json');
+let serializedFirebaseConfig;
+try {
+  serializedFirebaseConfig = await fs.readFile(firebaseConfigPath, 'utf8');
+} catch (error) {
+  if (error?.code !== 'ENOENT') throw error;
+}
+
+if (serializedFirebaseConfig) {
+  const firebaseConfig = JSON.parse(serializedFirebaseConfig);
+  const includesDriverApp = firebaseConfig.client?.some(
+    client => client.client_info?.android_client_info?.package_name === 'com.kayan.driver.demo',
+  );
+  if (!includesDriverApp) {
+    throw new Error('Firebase google-services.json must include the com.kayan.driver.demo Android app.');
+  }
+
+  const rootGradlePath = path.join('android', 'build.gradle');
+  let rootGradle = await fs.readFile(rootGradlePath, 'utf8');
+  if (!rootGradle.includes('com.google.gms:google-services')) {
+    const dependenciesBlock = rootGradle.replace(
+      /(\bdependencies\s*\{)/,
+      "$1\n        classpath 'com.google.gms:google-services:4.4.2'",
+    );
+    if (dependenciesBlock === rootGradle) throw new Error('Could not add the Firebase Gradle plugin to android/build.gradle.');
+    rootGradle = dependenciesBlock;
+    await fs.writeFile(rootGradlePath, rootGradle);
+  }
+
+  const appGradlePath = path.join('android', 'app', 'build.gradle');
+  let appGradle = await fs.readFile(appGradlePath, 'utf8');
+  if (!appGradle.includes("com.google.gms.google-services")) {
+    appGradle += "\napply plugin: 'com.google.gms.google-services'\n";
+    await fs.writeFile(appGradlePath, appGradle);
+  }
+  console.log('Configured Firebase Cloud Messaging for the KAYAN Driver Android app.');
+} else {
+  console.warn('Firebase google-services.json is not configured; Android push-token registration will be unavailable.');
+}
+
 const res = path.join(root, 'res');
 const logo = 'public/assets/kayan-eagle.png';
 const forest = '#062d24';

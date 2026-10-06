@@ -54,6 +54,9 @@ jobs:
         env:
           VITE_GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
           VITE_GOOGLE_MAPS_ANDROID_API_KEY: ${{ secrets.GOOGLE_MAPS_ANDROID_API_KEY }}
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
+          VITE_ENABLE_LIVE_DISPATCH: ${{ vars.VITE_ENABLE_LIVE_DISPATCH }}
 
       - name: Select isolated driver packaging configuration
         run: |
@@ -67,6 +70,16 @@ jobs:
         run: |
           npx --no-install cap add android
           npx --no-install cap sync android
+
+      - name: Configure Firebase for Android push notifications
+        run: |
+          if [ -n "$FIREBASE_ANDROID_CONFIG_BASE64" ]; then
+            printf '%s' "$FIREBASE_ANDROID_CONFIG_BASE64" | base64 --decode > android/app/google-services.json
+          else
+            echo "::warning::FIREBASE_ANDROID_CONFIG_BASE64 is not set; this APK will not register for push notifications."
+          fi
+        env:
+          FIREBASE_ANDROID_CONFIG_BASE64: ${{ secrets.FIREBASE_ANDROID_CONFIG_BASE64 }}
 
       - name: Apply foreground location permissions and KAYAN launcher icons
         run: node src/android/prepare-android.mjs

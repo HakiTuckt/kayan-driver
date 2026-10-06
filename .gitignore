@@ -13,6 +13,7 @@ dist-driver
 dist-ssr
 public/downloads/
 *.local
+supabase/.temp/
 
 # Editor directories and files
 .vscode/*

@@ -15,7 +15,7 @@ export type Destination = typeof destinations[number];
 export type Ride = { id: string; destination: Destination; pickup: string; category: string; price: number; payment: string; date: string; status: 'Completed' | 'Cancelled' };
 export type ActiveRide = Omit<Ride, 'date' | 'status'>;
 
-export default function BookingPanel({ destination, onDestination, onBook, savedHome, onSaveHome, defaultPayment, onSavedLocations, onSavedPayments }: { destination: Destination | null; onDestination: (d: Destination | null) => void; onBook: (ride: ActiveRide) => void; savedHome: Destination | null; onSaveHome: (d: Destination) => void; defaultPayment: string; onSavedLocations: () => void; onSavedPayments: () => void }) {
+export default function BookingPanel({ destination, onDestination, onBook, savedHome, onSaveHome, defaultPayment, onSavedLocations, onSavedPayments, bookingBusy = false, restoringRequest = false, liveDispatch = false }: { destination: Destination | null; onDestination: (d: Destination | null) => void; onBook: (ride: ActiveRide) => void; savedHome: Destination | null; onSaveHome: (d: Destination) => void; defaultPayment: string; onSavedLocations: () => void; onSavedPayments: () => void; bookingBusy?: boolean; restoringRequest?: boolean; liveDispatch?: boolean }) {
   const [query, setQuery] = useState(destination?.name || '');
   const [pickup, setPickup] = useState('Rhodes Park, Lusaka');
   const [category, setCategory] = useState('KAYAN Classic');
@@ -54,8 +54,8 @@ export default function BookingPanel({ destination, onDestination, onBook, saved
         </fieldset>
         <div className="mt-3 rounded-xl bg-muted/50 p-3 text-[10px] leading-relaxed text-muted-foreground"><p><strong className="text-foreground">Demo preference only.</strong> No wallet request or payment is sent. Merchant integrations are not connected.</p><p className="mt-1">Never enter or share your mobile-money PIN or OTP in KAYAN. Authorize future payments only through your provider’s official flow.</p></div>
         <div className="my-5 flex items-center justify-between border-t pt-4"><span className="text-sm font-medium">Estimated demo fare</span><span className="text-2xl font-extrabold">K{price}<span className="ml-1 text-xs font-normal text-muted-foreground">ZMW</span></span></div>
-        <Button disabled={!pickup.trim()} onClick={() => onBook({ id: `KYN-${Date.now()}`, destination, pickup: pickup.trim(), category, price, payment })} className="kayan-action w-full justify-between">Preview your ride <ArrowRight size={18}/></Button>
-        <p className="mt-3 flex items-center justify-center gap-1.5 text-[10px] text-muted-foreground"><ShieldCheck size={13}/> Simulation only · no real taxi dispatched</p>
+        <Button disabled={!pickup.trim() || bookingBusy || restoringRequest} onClick={() => onBook({ id: `KYN-${Date.now()}`, destination, pickup: pickup.trim(), category, price, payment })} className="kayan-action w-full justify-between">{bookingBusy ? 'Sending ride request…' : restoringRequest ? 'Checking active ride…' : liveDispatch ? 'Request a driver' : 'Preview your ride'} <ArrowRight size={18}/></Button>
+        <p className="mt-3 flex items-center justify-center gap-1.5 text-[10px] text-muted-foreground"><ShieldCheck size={13}/>{liveDispatch ? 'Live driver request · payment is not connected' : 'Simulation only · no real taxi dispatched'}</p>
       </div>}
       <div className="mt-auto pt-6"><div className="flex items-center justify-center gap-2 border-t pt-4 text-[10px] text-muted-foreground"><Star size={12} className="text-primary"/> Thoughtfully built for Zambia.</div></div>
     </div>

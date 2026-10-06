@@ -20,15 +20,32 @@ The isolated runner builds driver mode, replaces the runner’s Capacitor config
 
 **A local debug APK has been compiled and its archive and signing certificate validated, but it has not been installed or device-tested.** GitHub Actions must complete separately to produce the downloadable workflow artifact. Do not describe the demo as device-validated until the APK has been installed and the checks below pass.
 
-The checked-in `kayan-driver-ui-test.apk` predates the phone OTP changes. Build a fresh artifact after configuring and testing the Supabase phone-auth hook with Meta WhatsApp Cloud API delivery; the checked-in APK cannot validate phone registration or sign-in.
+The checked-in `kayan-driver-ui-test.apk` predates the current registration flow. Build a fresh artifact to test application submission, the thank-you screen, and the **Discover Demo Mode** button. The Meta WhatsApp Cloud API hook is still needed only to test sign-in for returning accounts with an already verified phone.
 
 ## Demo behavior and data
 
-First launch asks for driver contact and vehicle information, then presents WhatsApp code verification as its own registration progress step before requiring a driving licence, national registration card, vehicle registration, and roadworthiness certificate file (PDF/JPG/PNG, maximum 10 MiB each). The driver must explicitly consent to the WhatsApp message. Back from code entry returns to the phone field. The verified phone is linked to the current Supabase identity, preserving its private profile and document storage. Returning drivers can sign in with phone OTP on another device. This is passwordless phone authentication, not true 2FA; the test build has no staff review or approval flow. Do not upload genuine identity documents. Trip history, chat, earnings, and availability reset on reload; online starts off.
+First launch asks for driver contact and vehicle information without phone verification, then requires a driving licence, national registration card, vehicle registration, and roadworthiness certificate file (PDF/JPG/PNG, maximum 10 MiB each). After submission, a thank-you screen confirms receipt, says the KAYAN team will contact the driver at the provided number, and offers **Discover Demo Mode**. The application is stored under an anonymous Supabase Auth session; clearing app data or reinstalling can make it unrecoverable, so do not sign out of that session or upload genuine identity documents. The in-app demo does not review or approve applications. Returning accounts that already have a verified phone can still sign in with WhatsApp OTP. This is passwordless phone authentication, not true 2FA. Trip history, chat, earnings, and availability reset on reload; online starts off.
 
 Light/Dark/System selection uses the independent `kayan-driver-theme` device preference. The passenger theme key is unchanged. **Restart pre-registration** clears the introduction flag and session data without changing the theme.
 
-All requests are locally generated. Pickup and trip progression are manual. The driver map uses Google Maps and automatically requests foreground device location when opened. Location is separate from trip simulation; system permission is required. Chat replies are scripted and call connection is visual only (no audio, telephone link or microphone). See [GPS_ANDROID_TESTING.md](GPS_ANDROID_TESTING.md) for permissions, privacy and GPS acceptance checks. Completed fares form illustrative gross totals; actual payable balance is zero. No real dispatch, payments, wallet, payouts, staff document review, or driver approval occur. Subscription pricing and rewards remain **unfinalized**; the demo defines no plans, prices, or rewards.
+By default, requests are locally generated. Optional Supabase live dispatch can be enabled for passenger-to-driver offers; the backend only notifies approved drivers who are online. Pickup and trip progression remain manual. The driver map uses Google Maps and requests foreground device location when opened; location is not sent to the dispatch backend. Chat, call, payment, wallet, and payout are not connected. See [GPS_ANDROID_TESTING.md](GPS_ANDROID_TESTING.md) for permissions, privacy and GPS acceptance checks. Fuel use is a broad estimate based on entered engine size, fuel type, model category, and year—not a manufacturer-rated figure. Staff document review and driver approval are not part of the app. Subscription pricing and rewards remain **unfinalized**; the demo defines no plans, prices, or rewards.
+
+### Optional live ride offers and Android push
+
+Live dispatch is off unless `VITE_ENABLE_LIVE_DISPATCH=true`. Before enabling it, apply [`supabase/migrations/20261005214000_live_ride_dispatch.sql`](supabase/migrations/20261005214000_live_ride_dispatch.sql), keep Supabase Anonymous sign-ins enabled, and deploy `supabase/functions/create-ride-request` with JWT verification enabled. The migration adds ride/offer tables, driver availability, realtime publication, and protected RPCs. The passenger can request one of the built-in Lusaka destinations; payment is not initiated.
+
+Only drivers whose `driver_profiles.account_status` is `active` can go online. New applications are `pending_review`; there is no staff-approval screen or client-side approval shortcut. Approve test drivers only through an authorized server-side process. Drivers must be online, recently active, and not already handling a ride or offer.
+
+For web builds, set `VITE_ENABLE_LIVE_DISPATCH=true`, `VITE_SUPABASE_URL`, and `VITE_SUPABASE_PUBLISHABLE_KEY` in `.env.driver.local` (or the relevant web-build environment). For the GitHub driver APK workflow, set those three as repository Actions variables; set the dispatch variable to `true` only after the Supabase setup is complete.
+
+Push delivery additionally requires:
+
+1. Register a Firebase Android app whose package is `com.kayan.driver.demo` and download its `google-services.json`.
+2. Base64-encode that file as the GitHub Actions secret `FIREBASE_ANDROID_CONFIG_BASE64`. The driver workflow applies the Google Services Gradle plugin only when this config is present; builds without it can receive foreground Realtime offers but cannot register an FCM token.
+3. Create a Firebase service account allowed to send Firebase Cloud Messaging messages. Add its entire JSON as the Supabase Edge Function secret `FCM_SERVICE_ACCOUNT_JSON`; never put it in the app, `.env` files, GitHub build logs, or source control.
+4. Deploy the request function and configure its secret in the KAYAN Supabase project. Push is best effort; the in-app offer remains the source of truth.
+
+The preview does not include live driver location sharing, passenger-driver chat/calls, payment processing, or emergency monitoring. ETA and route distance are calculated on the driver device from its current location to the destination; they are not shared with the passenger.
 
 ## Native Google Maps API keys
 
@@ -37,7 +54,9 @@ The Android driver APK displays the **native Google Maps Android SDK**, not a ma
 - **Maps SDK for Android** — native Android map rendering.
 - **Maps JavaScript API** and **Routes API** — browser preview and traffic-aware driving-route calculation.
 
-After a driver accepts a demo request, Routes API returns alternative routes from the current device fix to the ride destination; the shortest traffic-aware duration is drawn on the native map.
+After accepting a ride, the driver gets a traffic-aware route to the pickup point; after marking the pickup and starting the trip, the route changes to the passenger destination. The fastest returned route is drawn on the map. As fresh foreground GPS fixes arrive, the map shows the current route instruction and distance to the next step, and the ETA/fuel estimate updates for the remaining route. Once guidance appears, the trip details panel smoothly minimizes and can be expanded again.
+
+This is visual, on-device guidance only: trip stages remain manual, and the app does not provide spoken directions, background navigation, or automatic off-route rerouting. A stale GPS fix is labelled and must not be treated as current guidance.
 
 Create two restricted keys in the same Cloud project:
 
@@ -51,6 +70,9 @@ Add these repository Actions secrets:
 - `GOOGLE_MAPS_ANDROID_API_KEY` — Android SDK-restricted key.
 - `GOOGLE_MAPS_API_KEY` — website-restricted Maps JavaScript/Routes key.
 - `ANDROID_DEBUG_KEYSTORE_BASE64` — a stable debug signing keystore encoded as one-line base64. The Android key's package/SHA-1 restriction must match this keystore; ephemeral CI signing keys would cause the native map to be rejected.
+- `FIREBASE_ANDROID_CONFIG_BASE64` — optional base64-encoded Firebase `google-services.json` for package `com.kayan.driver.demo`; required for Android FCM.
+
+For live dispatch APKs, also set the repository Actions variables `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`, and `VITE_ENABLE_LIVE_DISPATCH` (`true` to enable).
 
 Create a dedicated debug keystore locally and keep the file private (do not commit it):
 
@@ -81,6 +103,7 @@ The passenger app continues to use OpenStreetMap and does not need this key.
 - Relaunch: a profile with all four stored document records opens the demo dashboard. A saved profile missing any required document resumes at the document-upload steps with its profile data preserved.
 - Test Light, Dark, and System, including Android system appearance changes.
 - Go online; decline, generate another request, accept, and advance pickup/trip/drop-off.
+- With live dispatch enabled and two configured test sessions, request a built-in passenger destination and confirm an approved online driver receives the offer, can accept/decline it, and the passenger sees status changes. A missing Firebase config or denied push permission should leave foreground offer delivery available and show a warning.
 - Test chat, call connection/end, trip cancellation, earnings and history. Only completed trips contribute fares.
 - Confirm the online toggle is locked during a trip and offline removes pending requests.
 - Restart pre-registration and verify the session UI state is cleared.

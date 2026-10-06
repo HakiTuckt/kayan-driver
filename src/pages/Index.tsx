@@ -1,19 +1,36 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ArrowRight, CarFront, CheckCircle2, ChevronRight, Clock3, Leaf, MapPin, Menu, ShieldCheck, Sparkles, UserRound, Wallet, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import KayanMap from '@/components/KayanMap';
-import BookingPanel, { type ActiveRide, type Destination, type Ride } from '@/components/BookingPanel';
+import BookingPanel, { destinations, type ActiveRide, type Destination, type Ride } from '@/components/BookingPanel';
 import TripPanel from '@/components/TripPanel';
 import { toast } from 'sonner';
 import { Link } from 'react-router-dom';
 import ThemeSelect from '@/components/ThemeSelect';
 import KayanLogo from '@/components/KayanLogo';
 import PassengerSaved, { type SavedPlace } from '@/components/PassengerSaved';
+import {
+  cancelPassengerRideRequest,
+  createPassengerRideRequest,
+  expirePassengerRideRequest,
+  liveDispatchEnabled,
+  loadActivePassengerRideRequest,
+  loadPassengerRideStatus,
+  subscribeToPassengerRide,
+  type RideRequestStatus,
+} from '@/lib/ride-dispatch';
 
 type View = 'book' | 'activity';
 type Modal = 'welcome' | 'support' | 'account' | 'locations' | 'payments' | null;
+const rideStatusLabels: Record<RideRequestStatus, string> = {
+  searching: 'Looking for an available driver',
+  accepted: 'A driver has accepted your request',
+  cancelled: 'Ride request cancelled',
+  completed: 'Ride completed',
+  no_drivers: 'No drivers are available right now',
+};
 const Brand = () => <div className="flex items-center gap-2.5"><img src="/assets/kayan-eagle.png" alt="KAYAN eagle" className="h-11 w-11 rounded-xl object-cover"/><div><span className="display-font text-2xl font-extrabold tracking-[.2em] text-[#fff3df]">KAYAN</span><span className="mt-0.5 block text-[8px] font-semibold uppercase tracking-[.34em] text-[#e49656]">A better way to ride</span></div></div>;
 
 export default function Index() {
@@ -29,8 +46,125 @@ export default function Index() {
   const [savedPlaces, setSavedPlaces] = useState<SavedPlace[]>([]);
   const [savedMethods, setSavedMethods] = useState<string[]>(['Cash']);
   const [defaultPayment, setDefaultPayment] = useState('Cash');
+  const [dispatchRideId, setDispatchRideId] = useState<string | null>(null);
+  const [dispatchCreatedAt, setDispatchCreatedAt] = useState<string | null>(null);
+  const [dispatchStatus, setDispatchStatus] = useState<RideRequestStatus | null>(null);
+  const [bookingBusy, setBookingBusy] = useState(false);
+  const [cancellingRide, setCancellingRide] = useState(false);
+  const [restoringPassengerRide, setRestoringPassengerRide] = useState(liveDispatchEnabled);
   const saveHome = (place: Destination) => setSavedPlaces(previous => [...previous.filter(p => p.label !== 'Home'), { label: 'Home', destination: place }]);
   const navigate = (v: View) => { setView(v); setMobileMenu(false); };
+  const bookRide = async (ride: ActiveRide) => {
+    if (bookingBusy || restoringPassengerRide) return;
+    if (!liveDispatchEnabled) {
+      setTripStage(0);
+      setActiveRide(ride);
+      return;
+    }
+    setBookingBusy(true);
+    try {
+      const result = await createPassengerRideRequest(ride);
+      setTripStage(0);
+      setActiveRide(ride);
+      setDispatchRideId(result.request_id);
+      setDispatchCreatedAt(result.created_at);
+      setDispatchStatus(result.status);
+      if (result.status === 'no_drivers') toast.warning('No approved drivers are online right now.');
+      else toast.success('Your ride request was sent to online drivers.');
+      if (result.push_warning) toast.warning(result.push_warning);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not send the ride request.');
+    } finally {
+      setBookingBusy(false);
+    }
+  };
+  const clearLiveRide = () => {
+    setActiveRide(null);
+    setDestination(null);
+    setDispatchRideId(null);
+    setDispatchCreatedAt(null);
+    setDispatchStatus(null);
+  };
+  const cancelLiveRide = async () => {
+    if (!dispatchRideId || dispatchStatus !== 'searching' || cancellingRide) return;
+    setCancellingRide(true);
+    try {
+      const cancelled = await cancelPassengerRideRequest(dispatchRideId);
+      if (cancelled) {
+        setDispatchStatus('cancelled');
+        toast.success('Ride request cancelled.');
+      } else {
+        const current = await loadPassengerRideStatus(dispatchRideId);
+        if (current) setDispatchStatus(current.status);
+        toast.error('This ride can no longer be cancelled while searching.');
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not cancel the ride request.');
+    } finally {
+      setCancellingRide(false);
+    }
+  };
+  useEffect(() => {
+    if (!liveDispatchEnabled) return;
+    let cancelled = false;
+    void loadActivePassengerRideRequest().then(savedRide => {
+      if (cancelled || !savedRide) return;
+      const savedDestination = destinations.find(item => item.name === savedRide.destination);
+      if (!savedDestination) {
+        toast.error('Your saved ride uses a destination not supported by this preview.');
+        return;
+      }
+      setActiveRide({
+        id: savedRide.id,
+        destination: savedDestination,
+        pickup: savedRide.pickup,
+        category: savedRide.category,
+        price: savedRide.fare_zmw,
+        payment: 'Cash',
+      });
+      setDispatchRideId(savedRide.id);
+      setDispatchCreatedAt(savedRide.created_at);
+      setDispatchStatus(savedRide.status);
+    }).catch(error => {
+      if (!cancelled) toast.error(error instanceof Error ? error.message : 'Could not restore the active passenger ride.');
+    }).finally(() => {
+      if (!cancelled) setRestoringPassengerRide(false);
+    });
+    return () => { cancelled = true; };
+  }, []);
+  useEffect(() => {
+    if (!dispatchRideId) return;
+    let cancelled = false;
+    let receivedRealtimeUpdate = false;
+    const unsubscribe = subscribeToPassengerRide(
+      dispatchRideId,
+      update => {
+        receivedRealtimeUpdate = true;
+        setDispatchStatus(update.status);
+      },
+      message => toast.error(message),
+    );
+    void loadPassengerRideStatus(dispatchRideId).then(current => {
+      if (!cancelled && !receivedRealtimeUpdate && current) setDispatchStatus(current.status);
+    }).catch(error => {
+      if (!cancelled) toast.error(error instanceof Error ? error.message : 'Could not check the ride status.');
+    });
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, [dispatchRideId]);
+  useEffect(() => {
+    if (!dispatchRideId || dispatchStatus !== 'searching' || !dispatchCreatedAt) return;
+    const ageMillis = Date.now() - new Date(dispatchCreatedAt).getTime();
+    const timeoutMillis = Math.max(0, 65_000 - ageMillis);
+    const timer = window.setTimeout(() => {
+      void expirePassengerRideRequest(dispatchRideId).then(expired => {
+        if (expired) setDispatchStatus('no_drivers');
+      }).catch(error => toast.error(error instanceof Error ? error.message : 'Could not update the expired ride request.'));
+    }, timeoutMillis);
+    return () => window.clearTimeout(timer);
+  }, [dispatchCreatedAt, dispatchRideId, dispatchStatus]);
   const finish = (cancelled: boolean) => {
     if (!activeRide) return;
     setRides(previous => [{ ...activeRide, date: new Date().toLocaleString(), status: cancelled ? 'Cancelled' : 'Completed' }, ...previous]);
@@ -58,7 +192,18 @@ export default function Index() {
         {view === 'book' ? <>
           <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_365px] 2xl:grid-cols-[minmax(0,1fr)_400px]">
             <div className="min-w-0"><KayanMap stage={activeRide ? tripStage : null} hasRoute={!!destination || !!activeRide} destination={(activeRide?.destination || destination)?.name || ''}/></div>
-            <section className="rounded-2xl border border-border bg-card p-5 sm:p-6">{activeRide ? <TripPanel key={activeRide.id} ride={activeRide} stage={tripStage} onStage={setTripStage} onFinish={finish} onSupport={() => setModal('support')}/> : <BookingPanel destination={destination} onDestination={setDestination} savedHome={savedPlaces.find(p => p.label === 'Home')?.destination || null} onSaveHome={saveHome} defaultPayment={defaultPayment} onSavedLocations={() => setModal('locations')} onSavedPayments={() => setModal('payments')} onBook={ride => { setTripStage(0); setActiveRide(ride); }}/>}</section>
+            <section className="rounded-2xl border border-border bg-card p-5 sm:p-6">{activeRide ? liveDispatchEnabled ? <div className="flex min-h-[520px] flex-col justify-center">
+              <p className="text-[10px] font-bold uppercase tracking-[.18em] text-primary">Live ride request</p>
+              <h2 className="mt-2 text-2xl font-extrabold">{dispatchStatus ? rideStatusLabels[dispatchStatus] : 'Sending your request…'}</h2>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">{dispatchStatus === 'searching' ? 'Online drivers have been notified. Keep this page open to receive status updates.' : dispatchStatus === 'accepted' ? 'Your request has been accepted. Live driver location and in-app trip management are not available in this preview.' : dispatchStatus === 'no_drivers' ? 'Please try again later or choose a different destination.' : dispatchStatus === 'completed' ? 'Your driver marked the ride complete. No payment was processed.' : dispatchStatus === 'cancelled' ? 'No driver will be dispatched for this request.' : 'Please wait while we confirm the request with the ride service.'}</p>
+              <div className="my-6 space-y-4 rounded-2xl bg-secondary p-5">
+                <div><p className="text-[10px] text-muted-foreground">Pickup</p><p className="mt-1 text-sm font-semibold">{activeRide.pickup}</p></div>
+                <div><p className="text-[10px] text-muted-foreground">Destination</p><p className="mt-1 text-sm font-semibold">{activeRide.destination.name}</p></div>
+                <div className="flex justify-between border-t border-border pt-3 text-xs"><span>{activeRide.category} · {activeRide.destination.distance} km</span><span className="font-bold">K{activeRide.price}</span></div>
+              </div>
+              {dispatchStatus === 'searching' && <Button variant="outline" disabled={cancellingRide} onClick={() => void cancelLiveRide()} className="w-full">{cancellingRide ? 'Cancelling…' : 'Cancel request'}</Button>}
+              {dispatchStatus && dispatchStatus !== 'searching' && dispatchStatus !== 'accepted' && <Button onClick={clearLiveRide} className="kayan-action w-full">Back to booking</Button>}
+            </div> : <TripPanel key={activeRide.id} ride={activeRide} stage={tripStage} onStage={setTripStage} onFinish={finish} onSupport={() => setModal('support')}/> : <BookingPanel destination={destination} onDestination={setDestination} savedHome={savedPlaces.find(p => p.label === 'Home')?.destination || null} onSaveHome={saveHome} defaultPayment={defaultPayment} onSavedLocations={() => setModal('locations')} onSavedPayments={() => setModal('payments')} bookingBusy={bookingBusy} liveDispatch={liveDispatchEnabled} onBook={ride => void bookRide(ride)}/>}</section>
           </div>
           <div className="mt-5 grid gap-4 md:grid-cols-[1fr_1fr_1fr]">
             <div className="flex items-center gap-3 rounded-xl border border-border bg-card/70 p-4"><div className="rounded-xl bg-secondary p-2.5"><Sparkles size={20}/></div><div><h3 className="text-xs font-bold">A higher standard</h3><p className="mt-1 text-[10px] text-muted-foreground">Clean cars. A comfortable journey.</p></div></div>
@@ -66,7 +211,7 @@ export default function Index() {
             <button onClick={() => setModal('welcome')} className="group relative flex min-h-[80px] items-center overflow-hidden rounded-xl bg-[#173f30] p-4 text-left"><div className="relative z-10"><h3 className="text-xs font-bold text-[#fff3df]">Made for Zambia</h3><p className="mt-1 flex items-center gap-2 text-[10px] text-[#e99655]">Discover the KAYAN difference <ArrowRight size={12}/></p></div><img src="/assets/kayan-driver.png" alt="Illustrative professional KAYAN service" className="absolute right-0 top-0 h-full w-[32%] object-cover object-center transition-transform group-hover:scale-105"/></button>
           </div>
         </> : <section className="min-h-[600px] rounded-2xl border bg-card p-6 sm:p-8"><div className="flex items-center justify-between"><h2 className="text-lg font-bold">Your activity</h2><span className="rounded-full bg-secondary px-3 py-1 text-[10px] text-muted-foreground">Session only</span></div>{rides.length === 0 ? <div className="flex flex-col items-center py-16 text-center"><img src="/assets/ride-empty.png" alt="Taxi and destination illustration" className="mb-6 h-40 w-40 rounded-3xl"/><h3 className="text-xl font-bold">Your first journey awaits.</h3><p className="mb-6 mt-2 max-w-sm text-sm text-muted-foreground">Take the passenger experience for a spin. Completed and cancelled demo rides will appear here.</p><Button className="kayan-action" onClick={() => navigate('book')}>Explore a ride <ArrowRight size={16} className="ml-2"/></Button></div> : <div className="mt-6 space-y-3">{rides.map(ride => <button key={ride.id} onClick={() => { setSelectedRide(ride); setRating(0); }} className="flex w-full items-center gap-4 rounded-xl border p-4 text-left hover:bg-secondary"><span className="rounded-xl bg-secondary p-3"><CarFront size={24}/></span><div className="min-w-0 flex-1"><p className="truncate text-sm font-bold">{ride.destination.name}</p><p className="mt-1 text-[11px] text-muted-foreground">{ride.date} · {ride.category}</p><span className={`mt-2 inline-block rounded-full px-2 py-1 text-[9px] font-semibold ${ride.status === 'Completed' ? 'bg-[#e8f2e7] text-[#305f39]' : 'bg-[#fbece8] text-[#a34533]'}`}>{ride.status} · Demo</span></div><div className="text-right"><p className="text-sm font-bold">K{ride.price}</p><p className="mt-1 text-[10px] text-muted-foreground">Not charged</p></div><ChevronRight size={16}/></button>)}</div>}</section>}
-        <footer className="mt-6 flex flex-wrap items-center justify-between gap-2 text-[9px] text-muted-foreground"><span>© {new Date().getFullYear()} KAYAN · Built around you.</span><span>Prototype · No live dispatch, payments, or emergency monitoring</span></footer>
+        <footer className="mt-6 flex flex-wrap items-center justify-between gap-2 text-[9px] text-muted-foreground"><span>© {new Date().getFullYear()} KAYAN · Built around you.</span><span>{liveDispatchEnabled ? 'Preview · Payments, live driver location, and emergency monitoring are not connected' : 'Prototype · No live dispatch, payments, or emergency monitoring'}</span></footer>
       </main>
     </div>
     {mobileMenu && <div className="fixed inset-0 z-50 bg-[#062d24]/60 lg:hidden" onClick={() => setMobileMenu(false)}><aside className="flex h-full w-[280px] flex-col overflow-y-auto bg-[var(--forest)] px-4 py-8" onClick={e => e.stopPropagation()}><button aria-label="Close navigation" onClick={() => setMobileMenu(false)} className="absolute left-[245px] top-4 text-[#fff3df]"><X size={20}/></button>{nav}</aside></div>}

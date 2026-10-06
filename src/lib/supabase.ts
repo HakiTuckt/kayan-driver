@@ -62,6 +62,20 @@ export type RestoredDriverAccount = {
   documentsComplete: boolean;
 };
 
+export async function ensureAnonymousSupabaseSession() {
+  const supabase = getSupabaseClient();
+  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+  if (sessionError) throw new Error(`Could not check the Supabase session: ${sessionError.message}`);
+  if (sessionData.session) return sessionData.session;
+
+  const { data, error } = await supabase.auth.signInAnonymously();
+  if (error) {
+    throw new Error(`Could not start the anonymous app session: ${error.message}. Confirm anonymous sign-ins are enabled in Supabase.`);
+  }
+  if (!data.session) throw new Error('Supabase did not start an anonymous app session.');
+  return data.session;
+}
+
 export async function restoreDemoDriverProfile(): Promise<RestoredDriverAccount | null> {
   const supabase = getSupabaseClient();
   const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
@@ -82,7 +96,7 @@ export async function restoreDemoDriverProfile(): Promise<RestoredDriverAccount 
 
   const { data: vehicle, error: vehicleError } = await supabase
     .from('driver_vehicles')
-    .select('make, model, year, plate, color')
+    .select('make, model, year, fuel_type, engine_trim, plate, color')
     .eq('driver_id', userId)
     .limit(1)
     .maybeSingle();
@@ -99,11 +113,13 @@ export async function restoreDemoDriverProfile(): Promise<RestoredDriverAccount 
   return {
     profile: {
       name: savedProfile.full_name,
-      phone: phoneVerified ? phone : savedProfile.phone,
+      phone: savedProfile.phone,
       city: savedProfile.city,
       make: vehicle.make,
       model: vehicle.model,
       year: String(vehicle.year),
+      fuelType: vehicle.fuel_type,
+      engineTrim: vehicle.engine_trim,
       plate: vehicle.plate,
       color: vehicle.color,
     },
@@ -122,18 +138,13 @@ export async function saveDemoDriverProfile(profile: DriverProfile, documents: D
   }
 
   const supabase = getSupabaseClient();
-  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-  if (sessionError) throw new Error(`Could not check the demo sign-in: ${sessionError.message}`);
-  const authUser = sessionData.session?.user;
-  const userId = authUser?.id;
-  if (!userId) throw new Error('Verify your phone number before submitting the driver application.');
-  if (!authUser.phone || !authUser.phone_confirmed_at) throw new Error('Your Supabase phone number is not verified. Request and enter the WhatsApp code before submitting.');
-  const verifiedPhone = normalizeDriverPhone(profile.phone);
-  if (authUser.phone !== verifiedPhone) throw new Error('The verified phone number does not match the application. Verify the application phone number again.');
+  const session = await ensureAnonymousSupabaseSession();
+  const userId = session.user.id;
+  const contactPhone = normalizeDriverPhone(profile.phone);
 
   const profileRecord = {
     full_name: profile.name.trim(),
-    phone: verifiedPhone,
+    phone: contactPhone,
     city: profile.city.trim(),
   };
   const { data: existingProfile, error: findProfileError } = await supabase
@@ -153,6 +164,8 @@ export async function saveDemoDriverProfile(profile: DriverProfile, documents: D
     make: profile.make.trim(),
     model: profile.model.trim(),
     year: Number(profile.year),
+    fuel_type: profile.fuelType,
+    engine_trim: profile.engineTrim.trim(),
     plate: profile.plate.trim(),
     color: profile.color.trim(),
   };

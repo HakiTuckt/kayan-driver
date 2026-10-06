@@ -116,6 +116,13 @@
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
 }
+.driver-navigation-card {
+  border-color: var(--panel-border);
+  background-color: var(--panel-bg);
+  color: var(--panel-text);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
 .driver-map-panel [class~="text-[#d0ded5]"],
 .driver-map-panel [class~="text-[#b8cbbd]"] { color: var(--panel-muted); }
 .driver-map-panel [class~="text-[#ffbd8b]"],
@@ -130,6 +137,15 @@
 .driver-map-panel .driver-map-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.5rem; padding-block: 0.5rem; }
 .driver-map-panel .driver-map-summary p:first-child { overflow: hidden; font-size: 0.5625rem; text-overflow: ellipsis; white-space: nowrap; }
 .driver-map-panel .driver-map-summary p + p { margin-top: 0.125rem; font-size: 0.6875rem; }
+.driver-search-ticker { overflow: hidden; white-space: nowrap; }
+.driver-search-ticker-track { display: flex; width: max-content; animation: driver-search-ticker 18s linear infinite; }
+.driver-search-ticker-group { display: flex; flex: none; gap: 1.5rem; padding-right: 1.5rem; white-space: nowrap; }
+@keyframes driver-search-ticker { to { transform: translateX(-50%); } }
+@media (prefers-reduced-motion: reduce) {
+  .driver-search-ticker-track { width: 100%; animation: none; }
+  .driver-search-ticker-group { display: block; white-space: normal; }
+  .driver-search-ticker-group[aria-hidden="true"] { display: none; }
+}
 .driver-map-panel--request { padding: 0.625rem; }
 .driver-map-panel .driver-decline-action { background: #c83f50; color: white; }
 .driver-map-panel .driver-decline-action:hover { background: #a92f40; color: white; }
