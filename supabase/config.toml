@@ -6,3 +6,15 @@ verify_jwt = true
 
 [functions.driver-application-review]
 verify_jwt = true
+
+[functions.verify-driver-subscription]
+verify_jwt = true
+
+[functions.google-play-rtdn]
+verify_jwt = false
+
+[functions.driver-subscription-admin]
+verify_jwt = true
+
+[functions.mtn-momo-payment]
+verify_jwt = true

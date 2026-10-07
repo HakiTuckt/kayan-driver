@@ -26,6 +26,15 @@ export default function useDeviceLocation({ autoStart = false }: { autoStart?: b
   const foreground = visible && appActive;
 
   useEffect(() => {
+    mayRequest.current = autoStart;
+    setEnabled(autoStart);
+    if (!autoStart) {
+      setPosition(null);
+      setError('');
+    }
+  }, [autoStart]);
+
+  useEffect(() => {
     const visibility = () => setVisible(document.visibilityState === 'visible');
     document.addEventListener('visibilitychange', visibility);
     let disposed = false;

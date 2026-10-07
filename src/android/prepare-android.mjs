@@ -6,11 +6,16 @@ import { loadEnv } from 'vite';
 const root = 'android/app/src/main';
 const manifestPath = path.join(root, 'AndroidManifest.xml');
 const localBuildEnv = loadEnv('driver', process.cwd(), 'GOOGLE_MAPS_ANDROID_API_KEY');
+const capacitorConfig = JSON.parse(await fs.readFile('capacitor.config.json', 'utf8'));
 let manifest = await fs.readFile(manifestPath, 'utf8');
-const permissions = ['ACCESS_COARSE_LOCATION', 'ACCESS_FINE_LOCATION'];
+const permissions = [
+  'android.permission.ACCESS_COARSE_LOCATION',
+  'android.permission.ACCESS_FINE_LOCATION',
+];
+if (capacitorConfig.appId === 'com.kayan.driver.demo') permissions.push('com.android.vending.BILLING');
 let declarations = '';
 for (const permission of permissions) {
-  if (!manifest.includes(`android.permission.${permission}`)) declarations += `    <uses-permission android:name="android.permission.${permission}" />\n`;
+  if (!manifest.includes(`android:name="${permission}"`)) declarations += `    <uses-permission android:name="${permission}" />\n`;
 }
 if (!manifest.includes('android.hardware.location.gps')) declarations += '    <uses-feature android:name="android.hardware.location.gps" android:required="false" />\n';
 manifest = manifest.replace(/(<manifest\b[^>]*>)/, `$1\n${declarations}`);

@@ -6,7 +6,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import type { NavigationProgress } from '@/components/GoogleKayanMap';
 import type { FuelEstimate } from '@/lib/driver-fuel-estimate';
 
-export type DemoRequest = { id: string; passenger: string; pickup: string; destination: string; fare: number; distance: string; offerId?: string; live?: boolean };
+export type DemoRequest = { id: string; passenger: string; pickup: string; destination: string; fare: number; distance: string; offerId?: string; live?: boolean; stage?: 0 | 1 | 2 | 3 };
 export const tripStages = ['Heading to pickup', 'At pickup', 'Trip in progress', 'Drop-off reached'];
 export type RouteEstimate = { arrivalTime: string; distanceKm: number; fuel: FuelEstimate | null; navigation: NavigationProgress | null };
 export const DAILY_EARNINGS_GOAL = 400;
@@ -23,7 +23,7 @@ export function DailyEarningsGoal({ earnings, className = '' }: { earnings: numb
     <p className="mt-1 text-[9px] text-[#b8cbbd]">Completed trip fares · session only · no payout</p>
   </div>;
 }
-export default function DriverTrip({ request, stage, onStage, onFinish, compact = false, onlineDuration, routeEstimate, dailyEarnings = 0 }: { request: DemoRequest; stage: number; onStage: (stage: number) => void; onFinish: (cancelled: boolean) => void; compact?: boolean; onlineDuration?: string; routeEstimate?: RouteEstimate | null; dailyEarnings?: number }) {
+export default function DriverTrip({ request, stage, onStage, onFinish, compact = false, onlineDuration, routeEstimate, dailyEarnings = 0, stageBusy = false }: { request: DemoRequest; stage: number; onStage: (stage: 1 | 2 | 3) => void | Promise<void>; onFinish: (cancelled: boolean) => void; compact?: boolean; onlineDuration?: string; routeEstimate?: RouteEstimate | null; dailyEarnings?: number; stageBusy?: boolean }) {
   const [modal, setModal] = useState<'chat' | 'call' | null>(null);
   const [calling, setCalling] = useState(false);
   const [draft, setDraft] = useState('');
@@ -48,7 +48,7 @@ export default function DriverTrip({ request, stage, onStage, onFinish, compact 
     {compact ? <>
       <div className="mb-4 flex items-center justify-between gap-3"><div className="min-w-0"><p className="text-[10px] font-bold uppercase tracking-widest text-[#ffbd8b]">{tripStages[stage]} · {request.id}</p><p className="mt-1 truncate text-sm font-semibold">{stage === 0 ? request.pickup : request.destination}</p></div><div className="shrink-0 text-right"><p className="text-xs text-[#d0ded5]">{stage + 1} / {tripStages.length}</p>{onlineDuration && <p className="mt-1 font-mono text-xs tabular-nums text-[#ffbd8b]">Online {onlineDuration}</p>}</div>{navigationActive && <Button type="button" variant="ghost" aria-label="Minimize trip details" aria-expanded={true} className="h-9 w-9 shrink-0 p-0 text-[#d0ded5] hover:bg-white/10 hover:text-[var(--cream)]" onClick={() => setMinimized(true)}><ChevronDown size={18}/></Button>}</div>
       <DailyEarningsGoal earnings={dailyEarnings} className="mb-4"/>
-      {request.live && <p className="text-[10px] leading-4 text-[#d0ded5]">Your fresh GPS is shared with this passenger only during this accepted ride. Messaging and payments are not connected; stages are manual.</p>}
+      {request.live && <p className="text-[10px] leading-4 text-[#d0ded5]">Your fresh GPS and trip stages are shared with this passenger only during this accepted ride. Marking arrival at pickup sends an in-app passenger update. Messaging and payments are not connected.</p>}
       {routeEstimate && <RouteEstimateDetails estimate={routeEstimate} compact/>}
       <div className="space-y-2">
         {!request.live && <div className="flex gap-2">
@@ -57,16 +57,16 @@ export default function DriverTrip({ request, stage, onStage, onFinish, compact 
           <Button variant="ghost" className="h-11 min-w-0 flex-1 px-2 text-[11px] text-[#d0ded5] hover:bg-white/10 hover:text-[var(--cream)]" onClick={() => onFinish(true)}>Cancel</Button>
         </div>}
         {request.live && <Button variant="ghost" className="h-10 w-full text-[11px] text-[#d0ded5] hover:bg-white/10 hover:text-[var(--cream)]" onClick={() => onFinish(true)}>Cancel live ride</Button>}
-        <Button className="kayan-action h-auto min-h-11 w-full whitespace-normal px-3 py-2 text-center text-[11px] leading-tight" onClick={() => stage < 3 ? onStage(stage + 1) : onFinish(false)}>{(request.live ? ['Mark arrived at pickup', 'Start trip', 'Mark drop-off reached', 'Complete live ride'] : ['Simulate arrival at pickup', 'Start simulated trip', 'Simulate drop-off', 'Complete demo trip'])[stage]}<ArrowRight size={15} className="ml-1.5 inline shrink-0"/></Button>
+        <Button disabled={stageBusy} className="kayan-action h-auto min-h-11 w-full whitespace-normal px-3 py-2 text-center text-[11px] leading-tight" onClick={() => { if (stage < 3) void onStage((stage + 1) as 1 | 2 | 3); else onFinish(false); }}>{stageBusy ? 'Updating passenger…' : (request.live ? ['Mark arrived at pickup', 'Start trip', 'Mark drop-off reached', 'Complete live ride'] : ['Simulate arrival at pickup', 'Start simulated trip', 'Simulate drop-off', 'Complete demo trip'])[stage]}{!stageBusy && <ArrowRight size={15} className="ml-1.5 inline shrink-0"/>}</Button>
       </div>
     </> : <>
     <div className="flex items-center justify-between"><span className="text-[10px] font-bold uppercase tracking-widest text-primary">{request.live ? 'Live ride' : 'Active demo trip'}</span><span className="rounded-full bg-secondary px-3 py-1 text-[10px]">{request.id}</span></div>
-    <h2 className="mt-3 text-2xl font-extrabold">{tripStages[stage]}</h2><p className="mt-2 text-xs leading-5 text-muted-foreground">{request.live ? 'Fresh GPS is shared with this passenger for this accepted ride only. Messaging and payments are not connected; update ride stages manually.' : 'Ride stages remain manual. On-map route instructions and estimates use this device’s location; there is no live passenger.'}</p>
+    <h2 className="mt-3 text-2xl font-extrabold">{tripStages[stage]}</h2><p className="mt-2 text-xs leading-5 text-muted-foreground">{request.live ? 'Fresh GPS and ride stages are shared with this passenger for this accepted ride only. Marking arrival at pickup sends an in-app passenger update. Messaging and payments are not connected.' : 'Ride stages remain manual. On-map route instructions and estimates use this device’s location; there is no live passenger.'}</p>
     <ol className="my-6 space-y-4">{tripStages.map((title, i) => <li key={title} className={`flex items-center gap-3 text-xs ${i > stage ? 'text-muted-foreground' : 'font-semibold'}`}><span className={`flex h-7 w-7 items-center justify-center rounded-full ${i <= stage ? 'bg-primary text-white' : 'bg-muted'}`}>{i < stage ? <CheckCircle2 size={15}/> : i + 1}</span>{title}{i === stage && <span className="ml-auto text-[10px] text-primary">Current</span>}</li>)}</ol>
     <div className="rounded-2xl bg-secondary p-4"><p className="flex items-center gap-2 text-sm font-bold"><UserRound size={18}/>{request.passenger}<span className="ml-auto text-[10px] font-normal">{request.live ? 'KAYAN passenger' : 'Demo passenger'}</span></p><div className="mt-4 space-y-3">{[request.pickup, request.destination].map((place, i) => <div key={i} className="flex items-start gap-2"><MapPin size={15} className="mt-1 shrink-0 text-primary"/><div><p className="text-[10px] text-muted-foreground">{i === 0 ? 'Pickup' : 'Drop-off'}</p><p className="text-xs font-semibold">{place}</p></div></div>)}</div></div>
     {routeEstimate && <RouteEstimateDetails estimate={routeEstimate}/>}
     {!request.live && <div className="my-4 grid grid-cols-2 gap-3"><Button variant="outline" className="h-11 rounded-xl text-xs" onClick={() => setModal('chat')}><MessageCircle size={16} className="mr-2"/>Demo chat</Button><Button variant="outline" className="h-11 rounded-xl text-xs" onClick={() => { setCalling(false); setModal('call'); }}><Phone size={16} className="mr-2"/>Demo call</Button></div>}
-    <Button className="kayan-action w-full" onClick={() => stage < 3 ? onStage(stage + 1) : onFinish(false)}>{(request.live ? ['Mark arrived at pickup', 'Start trip', 'Mark drop-off reached', 'Complete live ride'] : ['Simulate arrival at pickup', 'Start simulated trip', 'Simulate drop-off', 'Complete demo trip'])[stage]}<ArrowRight size={16} className="ml-2"/></Button>
+    <Button disabled={stageBusy} className="kayan-action w-full" onClick={() => { if (stage < 3) void onStage((stage + 1) as 1 | 2 | 3); else onFinish(false); }}>{stageBusy ? 'Updating passenger…' : (request.live ? ['Mark arrived at pickup', 'Start trip', 'Mark drop-off reached', 'Complete live ride'] : ['Simulate arrival at pickup', 'Start simulated trip', 'Simulate drop-off', 'Complete demo trip'])[stage]}{!stageBusy && <ArrowRight size={16} className="ml-2"/>}</Button>
     <Button variant="ghost" className="mt-2 h-10 w-full rounded-xl text-xs text-muted-foreground" onClick={() => onFinish(true)}>{request.live ? 'Cancel live ride' : 'Cancel demo trip · no charge'}</Button>
     </>}
     </div>

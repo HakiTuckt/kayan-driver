@@ -1,8 +1,23 @@
 import type { ActiveRide } from '@/components/BookingPanel';
 import type { DemoRequest } from '@/components/driver/DriverTrip';
+import { paymentOptions, type PaymentMethod } from '@/lib/passenger-preferences';
 import { ensureAnonymousSupabaseSession, getSupabaseClient } from '@/lib/supabase';
 
 export type RideRequestStatus = 'searching' | 'accepted' | 'cancelled' | 'completed' | 'no_drivers';
+export type DriverRideStage = 0 | 1 | 2 | 3;
+export type PassengerRideActivity = {
+  id: string;
+  created_at: string;
+  pickup: string;
+  destination: string;
+  category: 'KAYAN Classic' | 'KAYAN Comfort';
+  payment_method: PaymentMethod;
+  distance_km: number;
+  fare_zmw: number;
+  status: RideRequestStatus;
+  driver_stage: DriverRideStage;
+  accepted_driver_id: string | null;
+};
 export const liveDispatchEnabled = import.meta.env.VITE_ENABLE_LIVE_DISPATCH === 'true';
 
 type CreateRideRequestResponse = {
@@ -18,6 +33,7 @@ export type PassengerRideUpdate = {
   id: string;
   status: RideRequestStatus;
   accepted_driver_id: string | null;
+  driver_stage: DriverRideStage;
 };
 
 export type DriverLocationFix = {
@@ -39,7 +55,28 @@ export type ActivePassengerRideRequest = {
   category: 'KAYAN Classic' | 'KAYAN Comfort';
   fare_zmw: number;
   status: 'searching' | 'accepted';
+  driver_stage: DriverRideStage;
 };
+
+function parseDriverRideStage(value: unknown): DriverRideStage | null {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 3
+    ? value as DriverRideStage
+    : null;
+}
+
+function isPaymentMethod(value: unknown): value is PaymentMethod {
+  return typeof value === 'string' && paymentOptions.includes(value);
+}
+
+function rideStageErrorMessage(action: string, error: { code: string; message: string }) {
+  const migrationMissing = (error.code === '42703' && (error.message.includes('driver_stage') || error.message.includes('payment_method')))
+    || (error.code === 'PGRST204' && error.message.includes('payment_method'))
+    || (error.code === 'PGRST202' && error.message.includes('update_driver_ride_stage'));
+  if (migrationMissing) {
+    return `${action}: a Passenger ride or payment migration is not installed. Apply the migrations in supabase/migrations in timestamp order in the KAYAN Supabase SQL Editor, then reload the app.`;
+  }
+  return `${action}: ${error.message}`;
+}
 
 export async function createPassengerRideRequest(ride: ActiveRide) {
   await ensureAnonymousSupabaseSession();
@@ -50,12 +87,33 @@ export async function createPassengerRideRequest(ride: ActiveRide) {
         pickup: ride.pickup,
         destination: ride.destination.name,
         category: ride.category,
+        payment_method: ride.payment,
       },
     });
   if (error) throw new Error(`Could not send this ride request: ${error.message}`);
   if (!data?.request_id || !data.created_at || !data.status) {
     throw new Error('The ride service returned an incomplete response. Check the request before trying again.');
   }
+  return data;
+}
+
+export async function updateDriverRideStage(rideId: string, stage: DriverRideStage) {
+  const { data, error } = await getSupabaseClient().rpc('update_driver_ride_stage', {
+    p_ride_id: rideId,
+    p_stage: stage,
+  });
+  if (error) throw new Error(rideStageErrorMessage('Could not update the passenger ride stage', error));
+  if (data !== stage) throw new Error('The ride service did not confirm the driver stage update.');
+}
+
+export async function submitPassengerRideRating(rideId: string, rating: number): Promise<boolean> {
+  await ensureAnonymousSupabaseSession();
+  const { data, error } = await getSupabaseClient().rpc('submit_passenger_ride_rating', {
+    p_ride_id: rideId,
+    p_rating: rating,
+  });
+  if (error) throw new Error(`Could not submit your ride rating: ${error.message}`);
+  if (typeof data !== 'boolean') throw new Error('The ride service returned an invalid rating response.');
   return data;
 }
 
@@ -68,18 +126,70 @@ export async function loadActivePassengerRideRequest(): Promise<ActivePassengerR
 
   const { data, error } = await supabase
     .from('ride_requests')
-    .select('id, created_at, pickup, destination, category, fare_zmw, status')
+    .select('id, created_at, pickup, destination, category, fare_zmw, status, driver_stage')
     .eq('passenger_id', passengerId)
     .in('status', ['searching', 'accepted'])
     .maybeSingle();
-  if (error) throw new Error(`Could not restore the active passenger ride: ${error.message}`);
+  if (error) throw new Error(rideStageErrorMessage('Could not restore the active passenger ride', error));
   if (!data || (data.category !== 'KAYAN Classic' && data.category !== 'KAYAN Comfort')
     || (data.status !== 'searching' && data.status !== 'accepted')) return null;
+  const driverStage = parseDriverRideStage(data.driver_stage);
+  if (driverStage === null) throw new Error('The ride service returned an invalid driver stage.');
   return {
     ...data,
     fare_zmw: Number(data.fare_zmw),
     status: data.status,
+    driver_stage: driverStage,
   };
+}
+
+export async function loadPassengerRideActivity(): Promise<PassengerRideActivity[]> {
+  const supabase = getSupabaseClient();
+  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+  if (sessionError) throw new Error(`Could not check the passenger session: ${sessionError.message}`);
+  const passengerId = sessionData.session?.user.id;
+  if (!passengerId) return [];
+
+  const { data, error } = await supabase
+    .from('ride_requests')
+    .select('id, created_at, pickup, destination, category, payment_method, distance_km, fare_zmw, status, driver_stage, accepted_driver_id')
+    .eq('passenger_id', passengerId)
+    .order('created_at', { ascending: false })
+    .limit(50);
+  if (error) throw new Error(rideStageErrorMessage('Could not load passenger activity', error));
+
+  return (data ?? []).map(ride => {
+    const driverStage = parseDriverRideStage(ride.driver_stage);
+    const distanceKm = Number(ride.distance_km);
+    const fareZmw = Number(ride.fare_zmw);
+    if (
+      typeof ride.id !== 'string'
+      || typeof ride.created_at !== 'string'
+      || typeof ride.pickup !== 'string'
+      || typeof ride.destination !== 'string'
+      || (ride.category !== 'KAYAN Classic' && ride.category !== 'KAYAN Comfort')
+      || !isPaymentMethod(ride.payment_method)
+      || !['searching', 'accepted', 'cancelled', 'completed', 'no_drivers'].includes(ride.status)
+      || driverStage === null
+      || !Number.isFinite(distanceKm)
+      || !Number.isFinite(fareZmw)
+    ) {
+      throw new Error('The ride service returned an invalid activity record.');
+    }
+    return {
+      id: ride.id,
+      created_at: ride.created_at,
+      pickup: ride.pickup,
+      destination: ride.destination,
+      category: ride.category,
+      payment_method: ride.payment_method,
+      distance_km: distanceKm,
+      fare_zmw: fareZmw,
+      status: ride.status as RideRequestStatus,
+      driver_stage: driverStage,
+      accepted_driver_id: typeof ride.accepted_driver_id === 'string' ? ride.accepted_driver_id : null,
+    };
+  });
 }
 
 export async function setDriverAvailability(isOnline: boolean) {
@@ -224,15 +334,18 @@ export function subscribeToPassengerDriverLocation(
 export async function loadPassengerRideStatus(rideId: string): Promise<PassengerRideUpdate | null> {
   const { data, error } = await getSupabaseClient()
     .from('ride_requests')
-    .select('id, status, accepted_driver_id')
+    .select('id, status, accepted_driver_id, driver_stage')
     .eq('id', rideId)
     .maybeSingle();
-  if (error) throw new Error(`Could not check passenger ride status: ${error.message}`);
+  if (error) throw new Error(rideStageErrorMessage('Could not check passenger ride status', error));
   if (!data || !['searching', 'accepted', 'cancelled', 'completed', 'no_drivers'].includes(data.status)) return null;
+  const driverStage = parseDriverRideStage(data.driver_stage);
+  if (driverStage === null) throw new Error('The ride service returned an invalid driver stage.');
   return {
     id: data.id,
     status: data.status as RideRequestStatus,
     accepted_driver_id: data.accepted_driver_id,
+    driver_stage: driverStage,
   };
 }
 
@@ -279,13 +392,15 @@ export async function loadAcceptedDriverRide(driverId: string): Promise<DemoRequ
 
   const { data: ride, error: rideError } = await supabase
     .from('ride_requests')
-    .select('id, pickup, destination, distance_km, fare_zmw')
+    .select('id, pickup, destination, distance_km, fare_zmw, driver_stage')
     .eq('id', offer.ride_id)
     .eq('accepted_driver_id', driverId)
     .eq('status', 'accepted')
     .maybeSingle();
-  if (rideError) throw new Error(`Could not restore the active passenger ride: ${rideError.message}`);
+  if (rideError) throw new Error(rideStageErrorMessage('Could not restore the active passenger ride', rideError));
   if (!ride) return null;
+  const driverStage = parseDriverRideStage(ride.driver_stage);
+  if (driverStage === null) throw new Error('The active ride has an invalid driver stage.');
 
   return {
     id: ride.id,
@@ -296,6 +411,7 @@ export async function loadAcceptedDriverRide(driverId: string): Promise<DemoRequ
     destination: ride.destination,
     fare: Number(ride.fare_zmw),
     distance: `${Number(ride.distance_km).toFixed(1)} km`,
+    stage: driverStage,
   };
 }
 
@@ -344,15 +460,23 @@ export function subscribeToPassengerRide(
       },
       payload => {
         const row = payload.new;
+        const driverStage = parseDriverRideStage(row.driver_stage);
         if (
           typeof row.id === 'string'
           && typeof row.status === 'string'
           && ['searching', 'accepted', 'cancelled', 'completed', 'no_drivers'].includes(row.status)
         ) {
+          if (driverStage === null) {
+            onError(row.driver_stage === undefined
+              ? `Ride status updates are unavailable: ${rideStageMigrationMessage}`
+              : 'Ride status updates did not include a valid driver stage. Refresh the passenger app.');
+            return;
+          }
           onUpdate({
             id: row.id,
             status: row.status as RideRequestStatus,
             accepted_driver_id: typeof row.accepted_driver_id === 'string' ? row.accepted_driver_id : null,
+            driver_stage: driverStage,
           });
         }
       },

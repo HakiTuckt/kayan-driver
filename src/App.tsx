@@ -3,11 +3,12 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
-import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import Website from "./pages/Website";
 import Driver from "./pages/Driver";
 import DriverApplicationReview from "./pages/DriverApplicationReview";
+import DriverSubscriptionAdmin from "./pages/DriverSubscriptionAdmin";
+import PassengerConcept from "./pages/PassengerConcept";
 import Projects from "./pages/Projects";
 import { ThemeProvider } from "next-themes";
 
@@ -16,16 +17,21 @@ const driverBuild = import.meta.env.VITE_APP_VARIANT === 'driver';
 
 function AppRoutes() {
   const { pathname } = useLocation();
-  const themeKey = driverBuild || pathname === '/driver' ? 'kayan-driver-theme' : 'kayan-theme';
-  return <ThemeProvider key={themeKey} attribute="class" defaultTheme={driverBuild || pathname === '/driver' ? 'light' : 'system'} enableSystem storageKey={themeKey}>
+  const driverTheme = driverBuild;
+  const passengerTheme = !driverBuild && pathname === '/';
+  const themeKey = driverTheme ? 'kayan-driver-theme' : passengerTheme ? 'kayan-passenger-theme' : 'kayan-theme';
+  return <ThemeProvider key={themeKey} attribute="class" defaultTheme={driverTheme || passengerTheme ? 'light' : 'system'} enableSystem storageKey={themeKey}>
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <Toaster />
         <Sonner />
         <Routes>
-          <Route path="/" element={driverBuild ? <Driver /> : <Index />} />
-          <Route path="/driver" element={<Driver />} />
-          <Route path="/admin/driver-applications" element={<DriverApplicationReview />} />
+          <Route path="/" element={driverBuild ? <Driver /> : <PassengerConcept />} />
+          {driverBuild && <>
+            <Route path="/driver" element={<Driver />} />
+            <Route path="/admin/driver-applications" element={<DriverApplicationReview />} />
+            <Route path="/admin/driver-premium-rewards" element={<DriverSubscriptionAdmin />} />
+          </>}
           {!driverBuild && <Route path="/website" element={<Website />} />}
           <Route path="/projects" element={<Projects />} />
           <Route path="*" element={<NotFound />} />
