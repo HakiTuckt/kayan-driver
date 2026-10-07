@@ -1,16 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
-import { ArrowRight, CarFront, CheckCircle2, Clock3, LayoutDashboard, LogOut, MapPin, Menu, RefreshCw, RotateCcw, ShieldCheck, Wallet, X } from 'lucide-react';
+import { ArrowRight, BadgePercent, CarFront, CheckCircle2, Clock3, LayoutDashboard, LogOut, MapPin, Menu, RefreshCw, RotateCcw, ShieldCheck, Wallet, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import ThemeSelect from '@/components/ThemeSelect';
 import GoogleKayanMap, { type GoogleRouteInfo } from '@/components/GoogleKayanMap';
 import DriverRegistration, { type DriverProfile } from '@/components/driver/DriverRegistration';
 import DriverDatabaseUnavailable from '@/components/driver/DriverDatabaseUnavailable';
 import DriverPhoneLogin from '@/components/driver/DriverPhoneLogin';
 import DriverTrip, { DailyEarningsGoal, type DemoRequest } from '@/components/driver/DriverTrip';
+import DriverMembership from '@/components/driver/DriverMembership';
 import type { RouteEstimate } from '@/components/driver/DriverTrip';
 import { getSupabaseClient, isSupabaseConfigured, restoreDemoDriverProfile, saveDemoDriverProfile, type DriverAccountStatus } from '@/lib/supabase';
 import { signOutDriver } from '@/lib/driver-phone-auth';
@@ -24,7 +25,9 @@ import {
   respondToDriverOffer,
   setDriverAvailability,
   subscribeToDriverOffers,
+  updateDriverRideStage,
   updateDriverRideLocation,
+  type DriverRideStage,
   type DriverLocationFix,
 } from '@/lib/ride-dispatch';
 import { configureDriverPushNotifications } from '@/lib/driver-push-notifications';
@@ -42,6 +45,7 @@ const passengerSearchTips = [
   'You can go offline whenever you need.',
 ];
 const DEMO_SEARCH_DURATION_MS = 7_000;
+const DRIVER_DEMO_MODE_KEY = 'kayan-driver-demo-mode';
 const createDemoRequest = (sequence: number): DemoRequest => ({ ...samples[sequence % samples.length], id: `KD-${String(sequence + 1).padStart(3, '0')}` });
 const returningProfile: DriverProfile = { name: 'Demo Driver', phone: 'Not saved', city: 'Lusaka', make: 'Toyota', model: 'Corolla', year: '2020', fuelType: 'petrol', engineTrim: '1.8 L petrol', plate: 'DEMO 001', color: 'Silver' };
 const driverBuild = import.meta.env.VITE_APP_VARIANT === 'driver';
@@ -54,6 +58,11 @@ const formatElapsed = (totalSeconds: number) => {
 };
 
 export default function Driver() {
+  useEffect(() => {
+    document.documentElement.classList.add('driver-theme');
+    return () => document.documentElement.classList.remove('driver-theme');
+  }, []);
+
   const [registered, setRegistered] = useState(false);
   const [profile, setProfile] = useState<DriverProfile>(returningProfile);
   const [registrationProfile, setRegistrationProfile] = useState<Partial<DriverProfile>>();
@@ -61,6 +70,7 @@ export default function Driver() {
   const [applicationStatus, setApplicationStatus] = useState<DriverAccountStatus | null>(null);
   const [applicationReviewNotes, setApplicationReviewNotes] = useState<string | null>(null);
   const [registrationNeedsDocuments, setRegistrationNeedsDocuments] = useState(false);
+  const [driverMenuOpen, setDriverMenuOpen] = useState(false);
   const [phoneLoginOpen, setPhoneLoginOpen] = useState(false);
   const [applicationSubmitted, setApplicationSubmitted] = useState(false);
   const databaseConfigured = isSupabaseConfigured();
@@ -68,7 +78,7 @@ export default function Driver() {
   const [databaseError, setDatabaseError] = useState('');
   const [databaseRevision, setDatabaseRevision] = useState(0);
   const [statusRefreshBusy, setStatusRefreshBusy] = useState(false);
-  const [view, setView] = useState<'dashboard' | 'earnings' | 'history'>('dashboard');
+  const [view, setView] = useState<'dashboard' | 'earnings' | 'history' | 'membership'>('dashboard');
   const [online, setOnline] = useState(false);
   const [availabilityBusy, setAvailabilityBusy] = useState(false);
   const [demoSearchPending, setDemoSearchPending] = useState(false);
@@ -77,7 +87,8 @@ export default function Driver() {
   const [request, setRequest] = useState<DemoRequest | null>(null);
   const [active, setActive] = useState<DemoRequest | null>(null);
   const [routeInfo, setRouteInfo] = useState<GoogleRouteInfo | null>(null);
-  const [stage, setStage] = useState(0);
+  const [stage, setStage] = useState<DriverRideStage>(0);
+  const [stageBusy, setStageBusy] = useState(false);
   const [sequence, setSequence] = useState(0);
   const [history, setHistory] = useState<HistoryTrip[]>([]);
   const [currentDayKey, setCurrentDayKey] = useState(() => getLocalDayKey(new Date()));
@@ -89,6 +100,14 @@ export default function Driver() {
   const onlineBeforeAccept = useRef(false);
   const lastLocationErrorAt = useRef(0);
   const mainRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (!driverMenuOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setDriverMenuOpen(false);
+    };
+    document.addEventListener('keydown', closeOnEscape);
+    return () => document.removeEventListener('keydown', closeOnEscape);
+  }, [driverMenuOpen]);
   const isApprovedDriver = applicationStatus === 'active' && registered;
   const isLiveDriver = liveDispatchEnabled && isApprovedDriver;
   requestRef.current = request;
@@ -140,8 +159,19 @@ export default function Driver() {
         setPhoneAccountVerified(savedDriver.phoneVerified);
         setApplicationStatus(savedDriver.accountStatus);
         setApplicationReviewNotes(savedDriver.reviewNotes);
-        setRegistrationNeedsDocuments(!!savedDriver.profile && !savedDriver.documentsComplete);
-        setRegistered(!!savedDriver.profile && savedDriver.documentsComplete);
+        const canResumePendingApplication = savedDriver.accountStatus === 'pending_review' && !savedDriver.documentsComplete;
+        setRegistrationNeedsDocuments(!!savedDriver.profile && canResumePendingApplication);
+        setRegistered(!!savedDriver.profile && !canResumePendingApplication);
+      } else if (window.localStorage.getItem(DRIVER_DEMO_MODE_KEY) === 'active') {
+        setProfile(returningProfile);
+        setRegistrationProfile(undefined);
+        setPhoneAccountVerified(false);
+        setApplicationStatus(null);
+        setApplicationReviewNotes(null);
+        setRegistrationNeedsDocuments(false);
+        setApplicationSubmitted(false);
+        setRegistered(true);
+        setView('dashboard');
       } else {
         setRegistrationProfile(undefined);
         setPhoneAccountVerified(false);
@@ -177,6 +207,7 @@ export default function Driver() {
       const restoredRide = await loadAcceptedDriverRide(driverId);
       if (!cancelled && restoredRide) {
         setActive(restoredRide);
+        setStage(restoredRide.stage ?? 0);
         setRequest(null);
         setOnline(false);
         setOnlineSince(null);
@@ -341,6 +372,7 @@ export default function Driver() {
       setOnline(false);
       setOnlineSince(null);
       setStage(0);
+      setStageBusy(false);
       setRouteInfo(null);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Could not accept this ride offer.');
@@ -365,6 +397,27 @@ export default function Driver() {
   const record = (trip: DemoRequest, status: HistoryTrip['status']) => {
     const now = new Date();
     setHistory(h => [{ ...trip, status, date: now.toLocaleString(), dayKey: getLocalDayKey(now) }, ...h]);
+  };
+  const advanceDriverStage = async (nextStage: DriverRideStage) => {
+    if (!active || nextStage !== stage + 1 || stageBusy) return;
+    if (!active.live) {
+      setStage(nextStage);
+      return;
+    }
+    setStageBusy(true);
+    try {
+      await updateDriverRideStage(active.id, nextStage);
+      setStage(nextStage);
+      toast.success(nextStage === 1
+        ? 'Passenger notified that you have arrived at pickup.'
+        : nextStage === 2
+          ? 'Passenger notified that the trip has started.'
+          : 'Passenger notified that you have reached the drop-off.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not update the passenger ride stage.');
+    } finally {
+      setStageBusy(false);
+    }
   };
   const finish = async (cancelled: boolean) => {
     if (!active) return;
@@ -396,6 +449,7 @@ export default function Driver() {
     setActive(null);
     setRouteInfo(null);
     setStage(0);
+    setStageBusy(false);
     if (availabilityError) {
       toast.error(`Trip completed, but you are offline because availability could not be restored: ${availabilityError}`);
     } else {
@@ -407,6 +461,11 @@ export default function Driver() {
     }
   };
   const reset = async () => {
+    if (applicationStatus && applicationStatus !== 'pending_review') {
+      setResetOpen(false);
+      toast.error('Reviewed driver profiles cannot be restarted as new applications.');
+      return;
+    }
     try {
       if (isLiveDriver) {
         if (active?.live) {
@@ -420,6 +479,11 @@ export default function Driver() {
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Could not safely clear the active ride before restarting.');
       return;
+    }
+    try {
+          window.localStorage.removeItem(DRIVER_DEMO_MODE_KEY);
+    } catch (error) {
+          toast.error(error instanceof Error ? error.message : 'Could not clear the saved demo profile preference.');
     }
     setRegistered(false);
     setApplicationSubmitted(false);
@@ -450,6 +514,32 @@ export default function Driver() {
   const discoverDemoMode = () => {
     setApplicationSubmitted(false);
     setRegistered(true);
+    setView('dashboard');
+  };
+  const restoreDemoProfile = () => {
+    try {
+      window.localStorage.setItem(DRIVER_DEMO_MODE_KEY, 'active');
+    } catch (error) {
+      toast.error(error instanceof Error
+        ? `The Demo Driver profile opened, but could not be saved for the next visit: ${error.message}`
+        : 'The Demo Driver profile opened, but could not be saved for the next visit.');
+    }
+    setProfile(returningProfile);
+    setRegistrationProfile(undefined);
+    setPhoneAccountVerified(false);
+    setApplicationStatus(null);
+    setApplicationReviewNotes(null);
+    setRegistrationNeedsDocuments(false);
+    setApplicationSubmitted(false);
+    setRegistered(true);
+    setOnline(false);
+    setDemoSearchPending(false);
+    setOnlineSince(null);
+    setRequest(null);
+    setActive(null);
+    setHistory([]);
+    setStage(0);
+    setSequence(0);
     setView('dashboard');
   };
   const retryDatabase = () => {
@@ -497,6 +587,11 @@ export default function Driver() {
         }
       }
       await signOutDriver();
+      try {
+        window.localStorage.removeItem(DRIVER_DEMO_MODE_KEY);
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : 'Could not clear the saved demo profile preference.');
+      }
       setRegistered(false);
       setPhoneLoginOpen(true);
       setRegistrationProfile(undefined);
@@ -516,6 +611,11 @@ export default function Driver() {
     }
   };
   const phoneAuthenticationComplete = () => {
+    try {
+      window.localStorage.removeItem(DRIVER_DEMO_MODE_KEY);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not clear the demo profile preference.');
+    }
     setPhoneLoginOpen(false);
     retryDatabase();
   };
@@ -528,8 +628,12 @@ export default function Driver() {
     ? stage === 0 ? active.pickup : stage === 2 ? active.destination : ''
     : request?.destination || '';
   const navigationStage = active && (stage === 0 || stage === 2) ? stage : null;
-  const navItems = [{ key: 'dashboard' as const, label: 'Drive', icon: LayoutDashboard }, { key: 'earnings' as const, label: 'Earnings', icon: Wallet }, { key: 'history' as const, label: 'Trip history', icon: Clock3 }];
-  const renderNavItems = () => navItems.map(({ key, label, icon: Icon }) => <button key={key} onClick={() => setView(key)} aria-current={view === key ? 'page' : undefined} className={`flex min-w-0 items-center justify-center gap-1.5 rounded-xl px-1.5 py-3 text-[10px] font-semibold transition-colors sm:gap-2 sm:px-4 sm:text-xs ${view === key ? 'bg-[var(--forest)] text-[var(--cream)]' : 'text-muted-foreground hover:bg-secondary hover:text-foreground'}`}><Icon size={16} className={`shrink-0 ${view === key ? 'text-[#efac78]' : ''}`}/><span className="whitespace-nowrap">{label}</span>{key === 'history' && history.length > 0 && <span className="rounded-full bg-primary px-1.5 py-0.5 text-[9px] text-white">{history.length}</span>}</button>);
+  const navItems = [
+    { key: 'dashboard' as const, label: 'Drive', icon: LayoutDashboard },
+    { key: 'earnings' as const, label: 'Earnings', icon: Wallet },
+    { key: 'history' as const, label: 'Trip history', icon: Clock3 },
+    ...(isApprovedDriver ? [{ key: 'membership' as const, label: 'Membership', icon: BadgePercent }] : []),
+  ];
   const onlineSummary = <div className="driver-summary-grid driver-map-summary grid grid-cols-3 gap-3 border-y border-white/20 py-3">
     <div className="min-w-0"><p className="text-[10px] text-[#d0ded5]">Today's earnings</p><p className="mt-1 truncate text-xs font-bold">K{dailyEarnings.toFixed(2)}</p></div>
     <div className="min-w-0"><p className="text-[10px] text-[#d0ded5]">Today's trips</p><p className="mt-1 truncate text-xs font-bold">{String(completedToday.length).padStart(2, '0')}</p></div>
@@ -584,27 +688,42 @@ export default function Driver() {
   </section>;
   return <div className={`driver-app-shell min-h-[100svh] overflow-x-clip ${immersiveTrip ? 'driver-app-shell--immersive' : ''}`}>
       <header className="driver-app-header relative flex min-h-16 flex-nowrap items-center justify-between gap-2 border-b bg-card px-3 py-3 sm:min-h-20 sm:px-8 sm:py-4">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" aria-label="Open driver profile menu" className="driver-profile-trigger h-10 w-10 shrink-0 rounded-xl"><Menu size={21}/></Button></DropdownMenuTrigger>
-          <DropdownMenuContent align="start" sideOffset={8} className="w-64 rounded-2xl p-2">
-            <DropdownMenuLabel className="px-3 py-2">
-              <span className="block truncate text-sm font-bold">{registered ? profile.name : 'Driver profile'}</span>
-              <span className="mt-1 block truncate text-xs font-normal text-muted-foreground">{registered ? `${profile.city} · ${profile.make} ${profile.model}` : 'Complete the demo introduction to view your profile'}</span>
-            </DropdownMenuLabel>
-            <DropdownMenuSeparator/>
-            <DropdownMenuItem disabled={!registered} onSelect={() => setResetOpen(true)} className="rounded-xl px-3 py-2.5"><RotateCcw size={15} className="mr-2"/>Restart pre-registration</DropdownMenuItem>
-            {phoneAccountVerified && <DropdownMenuItem disabled={!registered} onSelect={() => void signOut()} className="rounded-xl px-3 py-2.5"><LogOut size={15} className="mr-2"/>Sign out</DropdownMenuItem>}
-          </DropdownMenuContent>
-        </DropdownMenu>
-        <div className="driver-header-title absolute left-1/2 -translate-x-1/2 text-center">
-          <p className="display-font whitespace-nowrap text-sm font-extrabold tracking-[.02em] sm:text-lg sm:tracking-[.12em]">KAYAN <span className="text-primary">DRIVER</span></p>
-          <p className="mt-1 truncate text-[10px] text-muted-foreground">{registered ? profile.city : 'Driver demo'}</p>
+        <div className="flex min-w-0 items-center gap-2">
+          <button type="button" aria-label={driverMenuOpen ? 'Close driver menu' : 'Open driver menu'} aria-expanded={driverMenuOpen} aria-controls="driver-mobile-menu" onClick={() => setDriverMenuOpen(open => !open)} className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-primary text-xl font-extrabold text-primary-foreground shadow-sm">
+            K
+            <span aria-hidden="true" className="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full border-2 border-card bg-card text-primary">{driverMenuOpen ? <X size={11}/> : <Menu size={11}/>}</span>
+          </button>
+          <Link to={driverBuild ? '/' : '/driver'} className="min-w-0 rounded-xl" aria-label="KAYAN Driver home">
+            <span className="display-font block whitespace-nowrap text-sm font-extrabold tracking-[.12em]">KAYAN <span className="text-primary">DRIVER</span></span>
+            <span className="block truncate text-[9px] font-semibold uppercase tracking-[.18em] text-muted-foreground">Professional rides · {registered ? profile.city : 'Lusaka'}</span>
+          </Link>
         </div>
         <div className="ml-auto flex shrink-0 items-center gap-2 sm:gap-3"><span className="driver-demo-badge hidden rounded-full border border-primary/30 bg-accent px-3 py-1.5 text-[9px] font-bold tracking-widest sm:inline-flex">{isLiveDriver ? 'APPROVED DRIVER' : 'DEMO ONLY'}</span><ThemeSelect/></div>
       </header>
-      {registered && <nav aria-label="Driver navigation" className="driver-section-nav sticky top-0 z-40 grid-cols-3 gap-2 border-b bg-card/95 px-4 py-2 shadow-sm backdrop-blur">{renderNavItems()}</nav>}
-      {registered && <nav aria-label="Driver navigation" className="driver-mobile-nav fixed inset-x-0 bottom-0 z-[600] grid grid-cols-3 gap-1 border-t bg-card/95 px-2 pt-2 pb-[max(env(safe-area-inset-bottom),0.5rem)] shadow-[0_-8px_24px_rgba(0,0,0,0.12)] backdrop-blur">{renderNavItems()}</nav>}
-      <main ref={mainRef} className={`driver-app-main w-full ${immersiveTrip ? 'p-0' : 'p-3 pb-24 sm:p-6 lg:p-8'}`}>
+      {driverMenuOpen && createPortal(<>
+        <button type="button" aria-label="Close driver menu" onClick={() => setDriverMenuOpen(false)} className="fixed inset-x-0 bottom-0 top-16 z-[690] bg-primary/20 sm:top-20"/>
+        <nav id="driver-mobile-menu" aria-label="Driver menu" className="fixed bottom-0 left-0 top-16 z-[710] flex w-[min(84vw,320px)] flex-col gap-1 border-r border-primary/20 bg-background p-4 shadow-2xl sm:top-20">
+          <div className="mb-3 flex items-center gap-3 rounded-2xl bg-card p-3">
+            <span aria-hidden="true" className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary text-xl font-extrabold text-primary-foreground">K</span>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-bold">{registered ? profile.name : 'Driver profile'}</p>
+              <p className="mt-1 truncate text-xs text-muted-foreground">{registered ? `${profile.city} · ${profile.make} ${profile.model}` : 'Complete the demo introduction to view your profile'}</p>
+            </div>
+          </div>
+          {registered && !applicationSubmitted && <>
+            <p className="px-3 pb-2 text-[10px] font-extrabold uppercase tracking-[.16em] text-muted-foreground">Driver sections</p>
+            {navItems.map(({ key, label, icon: Icon }) => <button key={key} type="button" onClick={() => { setView(key); setDriverMenuOpen(false); }} aria-current={view === key ? 'page' : undefined} className={`flex items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-semibold transition-colors ${view === key ? 'bg-primary text-primary-foreground' : 'hover:bg-card'}`}>
+              <Icon size={17}/>
+              <span className="flex-1">{label}</span>
+              {key === 'history' && history.length > 0 && <span className={`rounded-full px-1.5 py-0.5 text-[9px] ${view === key ? 'bg-white/20' : 'bg-secondary'}`}>{history.length}</span>}
+            </button>)}
+          </>}
+          {registered && applicationStatus === 'pending_review' && <button type="button" onClick={() => { setDriverMenuOpen(false); setResetOpen(true); }} className="flex items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-semibold hover:bg-card"><RotateCcw size={17}/>Restart pending application</button>}
+          {phoneAccountVerified && <button type="button" disabled={!registered} onClick={() => { setDriverMenuOpen(false); void signOut(); }} className="flex items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-semibold hover:bg-card disabled:opacity-50"><LogOut size={17}/>Sign out</button>}
+          <p className="mt-auto px-3 pt-5 text-[10px] leading-5 text-muted-foreground">Live trip offers appear while the app is open. Demo trips clear when the app reloads.</p>
+        </nav>
+      </>, document.body)}
+      <main ref={mainRef} className={`driver-app-main w-full ${immersiveTrip ? 'p-0' : 'p-3 sm:p-6 lg:p-8'}`}>
         {applicationSubmitted ? <section className="mx-auto flex min-h-[65svh] w-full max-w-xl flex-col items-center justify-center rounded-3xl border bg-card p-6 text-center shadow-sm sm:p-10">
           <span className="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-secondary text-primary"><CheckCircle2 size={34}/></span>
           <p className="text-[10px] font-bold uppercase tracking-[.2em] text-primary">APPLICATION RECEIVED</p>
@@ -616,9 +735,9 @@ export default function Driver() {
             <Button className="kayan-action mt-4 w-full" onClick={discoverDemoMode}>Discover Demo Mode <ArrowRight size={17} className="ml-2"/></Button>
           </div>
           <p className="mt-5 max-w-md text-[11px] leading-5 text-muted-foreground">Phone verification is temporarily disabled. This application is saved to this app session and cannot be recovered if app data is cleared or the app is reinstalled.</p>
-        </section> : immersiveTrip ? <div className="driver-map-stage relative"><GoogleKayanMap demoLocation={!isLiveDriver} hasRoute={navigationStage !== null} destination={navigationDestination} stage={navigationStage} immersive shareLocation={isLiveDriver && !!active?.live} onDriverLocation={shareActiveRideLocation} onRouteInfo={setRouteInfo}/><div className="driver-map-overlay absolute inset-x-3 bottom-3 z-[500] mx-auto max-w-2xl">{active ? <DriverTrip key={active.id} request={active} stage={stage} onStage={setStage} onFinish={finish} compact onlineDuration={formatElapsed(onlineSeconds)} routeEstimate={routeEstimate} dailyEarnings={dailyEarnings}/> : waitingPanel}</div></div> : <>
+        </section> : immersiveTrip ? <div className="driver-map-stage relative"><GoogleKayanMap demoLocation={!isLiveDriver} hasRoute={navigationStage !== null} destination={navigationDestination} stage={navigationStage} immersive shareLocation={isLiveDriver && !!active?.live} onDriverLocation={shareActiveRideLocation} onRouteInfo={setRouteInfo}/><div className="driver-map-overlay absolute inset-x-3 bottom-3 z-[500] mx-auto max-w-2xl">{active ? <DriverTrip key={active.id} request={active} stage={stage} onStage={advanceDriverStage} onFinish={finish} stageBusy={stageBusy} compact onlineDuration={formatElapsed(onlineSeconds)} routeEstimate={routeEstimate} dailyEarnings={dailyEarnings}/> : waitingPanel}</div></div> : <>
         {registered && view === 'dashboard' && <div className="-mx-3 mb-6 sm:-mx-6"><GoogleKayanMap integrated demoLocation={!isLiveDriver} online={online} availabilityBusy={availabilityBusy} liveDriver={isLiveDriver} shareLocation={isLiveDriver && !!active?.live} onDriverLocation={shareActiveRideLocation} onAvailabilityChange={changeAvailability} hasRoute={!!active || !!request} destination={(active || request)?.destination || ''} stage={active ? stage : null} onRouteInfo={setRouteInfo}/></div>}
-        <div className={`driver-section-disclaimer mb-6 flex items-start gap-3 rounded-2xl border bg-secondary/60 px-4 py-3 ${registered && view !== 'dashboard' ? 'driver-section-disclaimer--compact' : ''}`}><ShieldCheck size={18} className="mt-0.5 shrink-0 text-primary"/><p className="text-[11px] leading-5 text-muted-foreground"><strong className="text-foreground">{isLiveDriver ? 'Approved driver · live dispatch enabled.' : 'Interactive driver demo.'}</strong> {isLiveDriver ? 'The driver map uses this device’s GPS while open. During an accepted live ride, fresh GPS fixes are shared with that passenger only and stop when the ride ends. No payments are processed.' : registered && view !== 'dashboard' ? 'No live dispatch or payments. Application documents are held in private test storage; the demo does not process approvals.' : 'No live dispatch or payments. Application files go to private test storage; the demo does not process approvals. Do not submit genuine identity documents.'}</p></div>
+        <div className={`driver-section-disclaimer mb-6 flex items-start gap-3 rounded-2xl border bg-secondary/60 px-4 py-3 ${registered && view !== 'dashboard' ? 'driver-section-disclaimer--compact' : ''}`}><ShieldCheck size={18} className="mt-0.5 shrink-0 text-primary"/><p className="text-[11px] leading-5 text-muted-foreground"><strong className="text-foreground">{isLiveDriver ? 'Approved driver · live dispatch enabled.' : 'Interactive driver demo.'}</strong> {isLiveDriver ? 'The driver map uses this device’s GPS while open. During an accepted live ride, fresh GPS fixes are shared with that passenger only and stop when the ride ends. Trip payments are not connected; monthly driver plans are handled by Google Play on Android.' : registered && view !== 'dashboard' ? 'No live dispatch or driver subscription payments. Application documents are held in private test storage; the demo does not process approvals.' : 'No live dispatch or driver subscription payments. Application files go to private test storage; the demo does not process approvals. Do not submit genuine identity documents.'}</p></div>
         {registered && applicationStatus && applicationStatus !== 'active' && <section role="status" className="mb-6 rounded-2xl border border-primary/30 bg-accent/60 p-4">
           <h2 className="text-sm font-bold">
             {applicationStatus === 'pending_review' ? 'Your application is awaiting review'
@@ -648,11 +767,20 @@ export default function Driver() {
               ? <DriverDatabaseUnavailable/>
               : phoneLoginOpen
                 ? <DriverPhoneLogin onAuthenticated={phoneAuthenticationComplete} onCancel={() => setPhoneLoginOpen(false)}/>
-                : <DriverRegistration key={registrationNeedsDocuments ? 'documents-needed' : 'new-registration'} initialProfile={registrationProfile} startAtDocuments={registrationNeedsDocuments} onComplete={completeRegistration} onSignIn={() => setPhoneLoginOpen(true)}/>
+                : <>
+                  <section className="mx-auto mb-4 flex w-full max-w-xl flex-wrap items-center justify-between gap-3 rounded-2xl border bg-card p-4">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-secondary text-primary"><CarFront size={19}/></span>
+                      <div><p className="text-sm font-semibold">Returning to the driver demo?</p><p className="mt-1 text-xs text-muted-foreground">Open the fictional Demo Driver profile without signing in.</p></div>
+                    </div>
+                    <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={restoreDemoProfile}>Restore Demo Driver</Button>
+                  </section>
+                  <DriverRegistration key={registrationNeedsDocuments ? 'documents-needed' : 'new-registration'} initialProfile={registrationProfile} startAtDocuments={registrationNeedsDocuments} onComplete={completeRegistration} onSignIn={() => setPhoneLoginOpen(true)}/>
+                </>
           : view === 'dashboard' ? <>
           <div className="driver-summary-grid mb-6 grid gap-3 sm:grid-cols-3">{[{ label: isLiveDriver ? 'Recorded fares' : 'Simulated earnings', value: `K${earnings.toFixed(2)}`, note: isLiveDriver ? 'Session-only · no payment processed' : 'Illustrative gross fares · not payable', icon: Wallet }, { label: isLiveDriver ? 'Completed trips' : 'Completed demo trips', value: String(completed.length).padStart(2, '0'), note: 'This session only', icon: CheckCircle2 }, { label: isLiveDriver ? 'Your vehicle' : 'Your demo vehicle', value: `${profile.make} ${profile.model}`, note: `${profile.color} · ${profile.plate}`, icon: CarFront }].map(({ label, value, note, icon: Icon }) => <section key={label} className="flex items-center gap-4 rounded-2xl border bg-card p-5"><span className="rounded-2xl bg-secondary p-3 text-primary"><Icon size={22}/></span><div className="min-w-0"><p className="text-[10px] text-muted-foreground">{label}</p><p className="mt-1 break-words text-xl font-extrabold">{value}</p><p className="mt-1 break-words text-[10px] text-muted-foreground">{note}</p></div></section>)}</div>
           <div>
-            {active ? <DriverTrip key={active.id} request={active} stage={stage} onStage={setStage} onFinish={finish} routeEstimate={routeEstimate} dailyEarnings={dailyEarnings}/> : request ? <section className="enter rounded-3xl border border-primary/40 bg-card p-6">
+            {active ? <DriverTrip key={active.id} request={active} stage={stage} onStage={advanceDriverStage} onFinish={finish} stageBusy={stageBusy} routeEstimate={routeEstimate} dailyEarnings={dailyEarnings}/> : request ? <section className="enter rounded-3xl border border-primary/40 bg-card p-6">
               <div className="flex items-center justify-between"><p className="text-[10px] font-bold uppercase tracking-widest text-primary">{request.live ? 'Passenger ride offer' : 'Simulated ride request'}</p><span className="rounded-full bg-secondary px-3 py-1 text-[10px]">{request.id}</span></div>
               <h2 className="mt-4 text-2xl font-extrabold">A new journey awaits.</h2>
               <p className="mt-2 text-xs text-muted-foreground">{request.live ? 'Sent by a passenger through KAYAN.' : 'Generated locally · no live passenger or timeout'}</p>
@@ -672,7 +800,7 @@ export default function Driver() {
             </section>}
             <div className="mt-4 rounded-2xl border bg-card p-4 text-xs leading-6 text-muted-foreground"><strong className="text-foreground">{active ? 'Finish or cancel the current trip.' : online ? 'Your availability is active.' : 'Your availability is off.'}</strong><br/>Switching offline removes any waiting offer.</div>
           </div>
-        </> : <>
+        </> : view === 'membership' && isApprovedDriver ? <DriverMembership/> : <>
           <div className="driver-secondary-page">
           <div className="driver-section-intro mb-3 flex flex-wrap items-center justify-between gap-2"><div><p className="text-[10px] font-bold uppercase tracking-[.2em] text-primary">YOUR ROAD. YOUR OPPORTUNITY.</p><h1 className="mt-1 text-2xl font-extrabold tracking-tight">{view === 'earnings' ? isLiveDriver ? 'Your recorded fares, at a glance.' : 'Your demo earnings, at a glance.' : isLiveDriver ? 'Your recent trips, in one place.' : 'Every demo journey, in one place.'}</h1><p className="mt-1 text-xs text-muted-foreground">Session-only totals; data clears on reload.</p></div></div>
           <section className="driver-section-content rounded-3xl border bg-card p-4 sm:p-8"><div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-lg font-bold">{view === 'earnings' ? 'Earnings breakdown' : 'Session trip history'}</h2><span className="rounded-full bg-secondary px-3 py-1 text-[10px]">No real transactions</span></div>{view === 'earnings' && <div className="driver-earnings-breakdown my-3 grid grid-cols-1 gap-2"><div className="rounded-2xl bg-secondary p-3"><p className="text-xs text-muted-foreground">Gross simulated fares</p><p className="mt-1 text-2xl font-extrabold">K{earnings.toFixed(2)}</p><p className="mt-1 text-[11px] text-muted-foreground">Completed trips only. No fees or net earnings inferred.</p></div><div className="rounded-2xl border p-3"><p className="text-xs text-muted-foreground">Actual payable balance</p><p className="mt-1 text-2xl font-extrabold">K0.00</p><p className="mt-1 text-[11px] text-muted-foreground">No payments, wallet, or withdrawals connected.</p></div></div>}{(view === 'earnings' ? completed : history).length === 0 ? <div className="py-6 text-center"><img src="/assets/ride-empty.png" alt="Illustrated taxi" className="mx-auto h-20 w-20 rounded-3xl"/><h3 className="mt-2 text-lg font-bold">{view === 'earnings' ? 'Your demo earnings start with a trip.' : 'A fresh start for every journey.'}</h3><p className="mb-3 mt-1 text-xs text-muted-foreground">Try a fictional ride from the Drive dashboard.</p><Button className="kayan-action" onClick={() => setView('dashboard')}>Back to Drive <ArrowRight size={16} className="ml-2"/></Button></div> : <div className="driver-trip-list mt-3 space-y-2">{(view === 'earnings' ? completed : history).map(trip => <article key={trip.id} className="driver-trip-card flex flex-wrap items-center gap-4 rounded-2xl border p-3"><span className="driver-trip-icon rounded-xl bg-secondary p-2"><CarFront size={20}/></span><div className="driver-trip-details min-w-0 flex-1"><p className="text-sm font-bold">{trip.destination}</p><p className="mt-1 text-[10px] text-muted-foreground">{trip.id} · {trip.date}</p><p className="mt-1 text-[10px] text-muted-foreground">From {trip.pickup}</p></div><div className="driver-trip-status text-right"><p className="text-sm font-bold">K{trip.status === 'Completed' ? trip.fare.toFixed(2) : '0.00'}</p><p className="mt-1 text-[10px] text-muted-foreground">{trip.status} · Demo only</p></div></article>)}</div>}</section>

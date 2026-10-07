@@ -4,6 +4,7 @@ type RideRequestInput = {
   pickup?: unknown;
   destination?: unknown;
   category?: unknown;
+  payment_method?: unknown;
 };
 
 type ServiceAccount = {
@@ -172,8 +173,10 @@ Deno.serve(async request => {
   const pickup = typeof input.pickup === 'string' ? input.pickup.trim() : '';
   const destinationName = typeof input.destination === 'string' ? input.destination.trim() : '';
   const category = input.category;
+  const paymentMethod = input.payment_method ?? 'Cash';
   const destination = destinations[destinationName];
-  if (!pickup || pickup.length > 160 || !destination || (category !== 'KAYAN Classic' && category !== 'KAYAN Comfort')) {
+  if (!pickup || pickup.length > 160 || !destination || (category !== 'KAYAN Classic' && category !== 'KAYAN Comfort')
+    || typeof paymentMethod !== 'string' || !['Cash', 'MTN MoMo', 'Airtel Money', 'Zamtel Kwacha'].includes(paymentMethod)) {
     return jsonResponse({ error: 'Choose a supported destination and ride category, and enter a valid pickup location.' }, 400);
   }
 
@@ -202,6 +205,7 @@ Deno.serve(async request => {
       pickup,
       destination: destinationName,
       category,
+      payment_method: paymentMethod,
       distance_km: destination.distanceKm,
       fare_zmw: fare,
     })
@@ -210,6 +214,9 @@ Deno.serve(async request => {
   if (rideError || !ride) {
     if (rideError?.code === '23505') {
       return jsonResponse({ error: 'You already have an active ride request.' }, 409);
+    }
+    if (rideError?.code === 'PGRST204' || rideError?.code === '42703') {
+      return jsonResponse({ error: 'The Passenger ride/payment migration is not installed. Apply the latest supabase/migrations files, then retry.' }, 503);
     }
     console.error('Could not create a ride request.', { message: rideError?.message });
     return jsonResponse({ error: 'Could not create the ride request.' }, 500);

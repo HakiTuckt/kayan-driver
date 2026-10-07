@@ -177,50 +177,19 @@ export async function saveDemoDriverProfile(profile: DriverProfile, documents: D
   const userId = session.user.id;
   const contactPhone = normalizeDriverPhone(profile.phone);
 
-  const profileRecord = {
-    full_name: profile.name.trim(),
-    phone: contactPhone,
-    city: profile.city.trim(),
-  };
-  const { data: existingProfile, error: findProfileError } = await supabase
-    .from('driver_profiles')
-    .select('id')
-    .eq('id', userId)
-    .maybeSingle();
-  if (findProfileError) throw new Error(`Could not check for an existing demo profile: ${findProfileError.message}`);
-
-  const profileSave = existingProfile
-    ? await supabase.from('driver_profiles').update(profileRecord).eq('id', userId).select('id').maybeSingle()
-    : await supabase.from('driver_profiles').insert({ id: userId, ...profileRecord }).select('id').maybeSingle();
-  if (profileSave.error) throw new Error(`Could not save the demo profile: ${profileSave.error.message}. Confirm the driver-data SQL setup has been run.`);
-  if (!profileSave.data) throw new Error('Supabase did not confirm that the demo profile was saved. Check row-level security and try again.');
-
-  const vehicleRecord = {
-    make: profile.make.trim(),
-    model: profile.model.trim(),
-    year: Number(profile.year),
-    fuel_type: profile.fuelType,
-    engine_trim: profile.engineTrim.trim(),
-    plate: profile.plate.trim(),
-    color: profile.color.trim(),
-  };
-  const { data: existingVehicle, error: findVehicleError } = await supabase
-    .from('driver_vehicles')
-    .select('id')
-    .eq('driver_id', userId)
-    .limit(1)
-    .maybeSingle();
-  if (findVehicleError) {
-    throw new Error(`The demo profile was saved, but its vehicle could not be checked: ${findVehicleError.message}. Retry registration to finish saving.`);
+  const { error: registrationError } = await supabase.rpc('save_demo_driver_registration', {
+    p_full_name: profile.name.trim(),
+    p_phone: contactPhone,
+    p_city: profile.city.trim(),
+    p_make: profile.make.trim(),
+    p_model: profile.model.trim(),
+    p_year: Number(profile.year),
+    p_plate: profile.plate.trim(),
+    p_color: profile.color.trim(),
+  });
+  if (registrationError) {
+    throw new Error(`Could not save the demo profile and vehicle: ${registrationError.message}. Check the driver registration SQL setup and application status.`);
   }
-
-  const vehicleSave = existingVehicle
-    ? await supabase.from('driver_vehicles').update(vehicleRecord).eq('id', existingVehicle.id).select('id').maybeSingle()
-    : await supabase.from('driver_vehicles').insert({ driver_id: userId, ...vehicleRecord }).select('id').maybeSingle();
-  if (vehicleSave.error) {
-    throw new Error(`The demo profile was saved, but its vehicle could not be saved: ${vehicleSave.error.message}. Retry registration to finish saving.`);
-  }
-  if (!vehicleSave.data) throw new Error('The demo profile was saved, but Supabase did not confirm the vehicle. Retry registration to finish saving.');
 
   const { data: savedDocuments, error: findDocumentsError } = await supabase
     .from('driver_documents')

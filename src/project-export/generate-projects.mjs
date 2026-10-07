@@ -47,12 +47,13 @@ import { TooltipProvider } from '@/components/ui/tooltip';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { ThemeProvider } from 'next-themes';
-import Home from './pages/${driver ? 'Driver' : 'Index'}';
+import Home from './pages/${driver ? 'Driver' : 'PassengerConcept'}';
 ${driver ? '' : "import Website from './pages/Website';"}
+${driver ? "import DriverApplicationReview from './pages/DriverApplicationReview';\nimport DriverSubscriptionAdmin from './pages/DriverSubscriptionAdmin';" : ''}
 import NotFound from './pages/NotFound';
 const client = new QueryClient();
 export default function App() {
-  return <ThemeProvider attribute="class" defaultTheme="system" enableSystem storageKey="${driver ? 'kayan-driver-theme' : 'kayan-theme'}"><QueryClientProvider client={client}><TooltipProvider><Toaster/><Sonner/><BrowserRouter><Routes><Route path="/" element={<Home/>}/>${driver ? '' : '<Route path="/website" element={<Website/>}/>'}<Route path="*" element={<NotFound/>}/></Routes></BrowserRouter></TooltipProvider></QueryClientProvider></ThemeProvider>;
+  return <ThemeProvider attribute="class" defaultTheme="light" enableSystem storageKey="${driver ? 'kayan-driver-theme' : 'kayan-passenger-theme'}"><QueryClientProvider client={client}><TooltipProvider><Toaster/><Sonner/><BrowserRouter><Routes><Route path="/" element={<Home/>}/>${driver ? '<Route path="/admin/driver-applications" element={<DriverApplicationReview/>}/><Route path="/admin/driver-premium-rewards" element={<DriverSubscriptionAdmin/>}/>' : '<Route path="/website" element={<Website/>}/>'}<Route path="*" element={<NotFound/>}/></Routes></BrowserRouter></TooltipProvider></QueryClientProvider></ThemeProvider>;
 }
 `;
 }
@@ -84,15 +85,17 @@ jobs:
       - uses: android-actions/setup-android@v4
       - name: Install locked web and location dependencies
         run: pnpm install --frozen-lockfile
-${driver ? `      - name: Verify Google Maps API keys are configured
-        run: |
-          test -n "$VITE_GOOGLE_MAPS_API_KEY" || { echo "::error::Add the GOOGLE_MAPS_API_KEY repository secret for browser/Routes API requests."; exit 1; }
-          test -n "$GOOGLE_MAPS_ANDROID_API_KEY" || { echo "::error::Add the GOOGLE_MAPS_ANDROID_API_KEY repository secret for the Android Maps SDK."; exit 1; }
-          test -n "$ANDROID_DEBUG_KEYSTORE_BASE64" || { echo "::error::Add the ANDROID_DEBUG_KEYSTORE_BASE64 repository secret so the app-restricted Android Maps key matches this APK."; exit 1; }
-        env:
-          VITE_GOOGLE_MAPS_API_KEY: \${{ secrets.GOOGLE_MAPS_API_KEY }}
-          GOOGLE_MAPS_ANDROID_API_KEY: \${{ secrets.GOOGLE_MAPS_ANDROID_API_KEY }}
-          ANDROID_DEBUG_KEYSTORE_BASE64: \${{ secrets.ANDROID_DEBUG_KEYSTORE_BASE64 }}
+- name: Verify Google Maps JavaScript API key is configured
+  run: test -n "$VITE_GOOGLE_MAPS_API_KEY" || { echo "::error::Add the GOOGLE_MAPS_API_KEY repository secret for Google Maps and route previews."; exit 1; }
+  env:
+    VITE_GOOGLE_MAPS_API_KEY: \${{ secrets.GOOGLE_MAPS_API_KEY }}
+${driver ? `      - name: Verify Android Maps key and signing key are configured
+  run: |
+    test -n "$GOOGLE_MAPS_ANDROID_API_KEY" || { echo "::error::Add the GOOGLE_MAPS_ANDROID_API_KEY repository secret for the Android Maps SDK."; exit 1; }
+    test -n "$ANDROID_DEBUG_KEYSTORE_BASE64" || { echo "::error::Add the ANDROID_DEBUG_KEYSTORE_BASE64 repository secret so the app-restricted Android Maps key matches this APK."; exit 1; }
+  env:
+    GOOGLE_MAPS_ANDROID_API_KEY: \${{ secrets.GOOGLE_MAPS_ANDROID_API_KEY }}
+    ANDROID_DEBUG_KEYSTORE_BASE64: \${{ secrets.ANDROID_DEBUG_KEYSTORE_BASE64 }}
 ` : ''}
 ${driver ? `      - name: Install stable debug signing key
         run: |
@@ -107,9 +110,13 @@ ${driver ? `      - name: Install stable debug signing key
           pnpm exec tsc --noEmit -p tsconfig.app.json
           pnpm exec tsc --noEmit -p tsconfig.node.json
           pnpm run build
-${driver ? `        env:
+        env:
           VITE_GOOGLE_MAPS_API_KEY: \${{ secrets.GOOGLE_MAPS_API_KEY }}
-          VITE_GOOGLE_MAPS_ANDROID_API_KEY: \${{ secrets.GOOGLE_MAPS_ANDROID_API_KEY }}
+${driver ? '' : `          VITE_ENABLE_LIVE_DISPATCH: \${{ vars.VITE_ENABLE_LIVE_DISPATCH }}
+          VITE_SUPABASE_URL: \${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: \${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+`}
+${driver ? `          VITE_GOOGLE_MAPS_ANDROID_API_KEY: \${{ secrets.GOOGLE_MAPS_ANDROID_API_KEY }}
 ` : ''}
       - name: Install Android packaging tools in separate directory
         run: npm install --prefix .apk-tools --no-package-lock @capacitor/cli@7 @capacitor/android@7
@@ -145,12 +152,48 @@ export async function generateProjects(outputDirectory, verify = false) {
       const project = path.join(temporary, `kayan-${variant}`);
       await fs.mkdir(project, { recursive: true });
       for (const file of rootFiles) await fs.copyFile(file, path.join(project, file));
-      await fs.cp('src', path.join(project, 'src'), { recursive: true, filter: source => !source.startsWith(path.join('src', 'project-export')) && source !== path.join('src', 'pages', 'Projects.tsx') });
+      if (driver) await fs.copyFile('SUPABASE_DRIVER_DATA.md', path.join(project, 'SUPABASE_DRIVER_DATA.md'));
+      await fs.cp('src', path.join(project, 'src'), { recursive: true, filter: source => !source.startsWith(path.join('src', 'project-export')) && source !== path.join('src', 'pages', 'Projects.tsx') && source !== path.join('src', 'pages', 'Index.tsx') });
       await fs.cp('public', path.join(project, 'public'), { recursive: true, filter: source => source !== path.join('public', 'downloads') });
+      const temporarySupabasePath = path.resolve('supabase/.temp');
+      const passengerBackendPaths = new Set([
+        'supabase',
+        'supabase/config.toml',
+        'supabase/functions',
+        'supabase/functions/create-ride-request',
+        'supabase/functions/create-ride-request/index.ts',
+        'supabase/functions/mtn-momo-payment',
+        'supabase/functions/mtn-momo-payment/index.ts',
+        'supabase/migrations',
+      ]);
+      await fs.cp('supabase', path.join(project, 'supabase'), {
+        recursive: true,
+        filter: source => {
+          const resolvedSource = path.resolve(source);
+          if (resolvedSource === temporarySupabasePath || resolvedSource.startsWith(`${temporarySupabasePath}${path.sep}`)) return false;
+          return driver || passengerBackendPaths.has(source) || source.startsWith('supabase/migrations/');
+        },
+      });
       const pkg = JSON.parse(await fs.readFile('package.json', 'utf8'));
       pkg.name = `kayan-${variant}-demo`;
       pkg.packageManager = 'pnpm@10.11.0';
       pkg.scripts = { dev: 'vite', build: 'vite build', preview: 'vite preview', lint: 'eslint .' };
+      if (!driver) {
+        const hasNativePurchasesDependency = Object.hasOwn(pkg.dependencies, '@capgo/native-purchases');
+        delete pkg.dependencies['@capgo/native-purchases'];
+        if (hasNativePurchasesDependency) {
+          const lockfilePath = path.join(project, 'pnpm-lock.yaml');
+          const lockfile = await fs.readFile(lockfilePath, 'utf8');
+          const passengerLockfile = lockfile.replace(
+            /^      '@capgo\/native-purchases':\n        specifier: [^\n]+\n        version: [^\n]+\n/m,
+            '',
+          );
+          if (passengerLockfile === lockfile) {
+            throw new Error('Could not remove the native purchases dependency from the Passenger lockfile.');
+          }
+          await fs.writeFile(lockfilePath, passengerLockfile);
+        }
+      }
       await fs.writeFile(path.join(project, 'package.json'), JSON.stringify(pkg, null, 2) + '\n');
       const config = JSON.parse(await fs.readFile(driver ? 'capacitor.driver.config.json' : 'capacitor.config.json', 'utf8'));
       config.webDir = 'dist';
@@ -160,7 +203,7 @@ export async function generateProjects(outputDirectory, verify = false) {
       let html = await fs.readFile('index.html', 'utf8');
       html = html.replace('KAYAN Passenger Demo', `KAYAN ${label} Demo`);
       await fs.writeFile(path.join(project, 'index.html'), html);
-      for (const page of ['Index.tsx', 'Website.tsx']) {
+      for (const page of ['Website.tsx']) {
         const file = path.join(project, 'src/pages', page);
         let content = await fs.readFile(file, 'utf8');
         content = content.replaceAll('/assets/kayan-driver.png', '/assets/kayan-eagle.png').replaceAll('Illustrative professional KAYAN service', 'KAYAN eagle logo').replaceAll('Illustrative clean taxi and professional driver in Lusaka', 'KAYAN eagle logo').replaceAll('Illustrative professional driver and clean taxi in Lusaka', 'KAYAN eagle logo');
@@ -186,11 +229,13 @@ Both projects use different package IDs and can be installed side by side. Updat
 
 ## Included
 
-React/TypeScript source, locked pnpm web dependencies, native foreground location plugins, ${driver ? 'native Google Maps Android SDK for the driver APK and Google Maps JavaScript API for browser previews' : 'Leaflet/OpenStreetMap map'}, eagle launcher icon generation, Capacitor config, and a complete GitHub Actions debug APK workflow. Web source dependencies use a frozen lockfile; Android CLI/framework packaging tools resolve within Capacitor major 7 in an isolated tools directory. Node 22, Java 21 and Android SDK are set up by CI. The driver APK requires restricted Google Maps keys and a stable debug keystore secret; the passenger build does not.
+React/TypeScript source, locked pnpm web dependencies, native foreground location plugins, ${driver ? 'native Google Maps Android SDK, Google Play Billing for monthly driver subscriptions, and Google Maps JavaScript API' : 'Google Maps JavaScript API'}, eagle launcher icon generation, Capacitor config, and a complete GitHub Actions debug APK workflow. Web source dependencies use a frozen lockfile; Android CLI/framework packaging tools resolve within Capacitor major 7 in an isolated tools directory. Node 22, Java 21 and Android SDK are set up by CI. Both builds require a restricted Google Maps JavaScript API key; the driver APK additionally needs a restricted Android Maps key and stable debug keystore secret.
 
-${driver ? 'First-launch fictional driver pre-registration, automatic foreground device-location requests when the map opens, native Google Maps Android SDK map with fastest-available driving routes to accepted ride destinations, manual ride requests/trips, scripted chat/call, illustrative earnings and history. Enable Maps SDK for Android, Maps JavaScript API and Routes API with billing. Add repository Actions secrets GOOGLE_MAPS_ANDROID_API_KEY (Android app-restricted to com.kayan.driver.demo and its signing certificate), GOOGLE_MAPS_API_KEY (website-restricted for Maps JavaScript API and Routes API, including https://localhost/*), and ANDROID_DEBUG_KEYSTORE_BASE64 (the matching debug keystore in base64; create it with the standard alias and password documented in ANDROID_DRIVER_DEMO.md). For local development, set VITE_GOOGLE_MAPS_ANDROID_API_KEY and VITE_GOOGLE_MAPS_API_KEY in the environment or an ignored .env.local file; GOOGLE_MAPS_ANDROID_API_KEY must also be present while preparing the Android manifest.' : 'Passenger booking and registration previews, manual trip simulation and scripted chat/call. Passenger device location remains opt-in and foreground-only.'}
+${driver ? 'First launch can restore the fictional Demo Driver profile without authentication; the profile choice is saved locally while trip activity remains session-only. Driver pre-registration remains available for applications, with automatic foreground device-location requests when the map opens, native Google Maps Android SDK map with fastest-available driving routes to accepted ride destinations, monthly Plus (ZMW 399) and Premium (ZMW 499) Google Play subscriptions, 5% commission tracking for Free drivers, 0% for active subscriptions, quarterly Premium fuel-reward eligibility, and illustrative earnings/history. Play subscriptions are Android-only and require Play Console products `kayan_driver_plus` and `kayan_driver_premium` with a monthly base plan, plus the Supabase verification and RTDN setup in ANDROID_DRIVER_DEMO.md. Enable Maps SDK for Android, Maps JavaScript API and Routes API with billing. Add repository Actions secrets GOOGLE_MAPS_ANDROID_API_KEY (Android app-restricted to com.kayan.driver.demo and its signing certificate), GOOGLE_MAPS_API_KEY (website-restricted for Maps JavaScript API and Routes API, including https://localhost/*), and ANDROID_DEBUG_KEYSTORE_BASE64 (the matching debug keystore in base64; create it with the standard alias and password documented in ANDROID_DRIVER_DEMO.md). For local development, set VITE_GOOGLE_MAPS_ANDROID_API_KEY and VITE_GOOGLE_MAPS_API_KEY in the environment or an ignored .env.local file; GOOGLE_MAPS_ANDROID_API_KEY must also be present while preparing the Android manifest.' : 'The new passenger booking experience with a persisted Activity view, live driver-stage updates and notifications when live dispatch is enabled, plus a demo ride flow when it is disabled. Google Maps JavaScript API and Routes API power passenger map and route previews; device location is requested at launch and used while the app is in the foreground. Add a website-restricted GOOGLE_MAPS_API_KEY repository secret with Maps JavaScript API, Routes API, and Geocoding API enabled, billing active, and https://localhost/* allowed for the Android WebView. For local development, set VITE_GOOGLE_MAPS_API_KEY in an ignored .env.local file. Live dispatch additionally requires VITE_ENABLE_LIVE_DISPATCH=true, VITE_SUPABASE_URL, VITE_SUPABASE_PUBLISHABLE_KEY, the existing Supabase dispatch backend, and the migrations from this repository.'}
 
-Device location is separate from simulated trips. No real dispatch, payments, uploads or approval. Subscription pricing and rewards remain unfinalized. See GPS_ANDROID_TESTING.md for privacy and MuMu/physical-device checks.
+${driver ? 'Trip payment collection is not available in the Driver app. Driver commission is recorded separately from passenger payments. Google Play can collect driver subscription fees only after Play Console products and server verification are configured.' : 'Passenger MTN MoMo collection is a sandbox-only Request to Pay initiated after a completed ride booked with MTN MoMo; other payment providers are not processed. Configure the sandbox secrets in the Supabase Edge Function as described in ANDROID_DRIVER_DEMO.md. No production funds are collected.'} Uploads and approval are not provided. See GPS_ANDROID_TESTING.md for privacy and MuMu/physical-device checks.
+
+${driver ? '' : 'Passenger pickup defaults to the device location, which uses Google Maps reverse geocoding to show a street address. Saved addresses also use map-pin selection and reverse geocoding; enable the Geocoding API on the website-restricted Maps key. A manually edited pickup is saved on this device and remains selected until the user switches back to device location. Saved addresses, payment type labels and the default preference stay in this browser’s local storage. MTN MoMo numbers are sent to MTN only for a requested sandbox payment after trip completion and are not saved by this app; never provide a PIN or OTP.'}
 
 ## Verification and limits
 
@@ -198,15 +243,40 @@ These archives are generated from the current application source. Their standalo
 `;
       await fs.writeFile(path.join(project, 'README.md'), projectReadme);
       if (verify) {
+        execFileSync('pnpm', ['install', '--frozen-lockfile', '--lockfile-only', '--offline', '--ignore-scripts'], {
+          cwd: project,
+          stdio: 'pipe',
+          timeout: 120000,
+        });
         await fs.symlink(path.resolve('node_modules'), path.join(project, 'node_modules'), process.platform === 'win32' ? 'junction' : 'dir');
         execFileSync(process.execPath, [path.resolve('node_modules/vite/bin/vite.js'), 'build'], { cwd: project, stdio: 'pipe', timeout: 120000 });
         await fs.rm(path.join(project, 'node_modules'));
         await fs.rm(path.join(project, 'dist'), { recursive: true, force: true });
       }
       const files = await entries(project, `kayan-${variant}/`);
-      for (const required of ['package.json', 'pnpm-lock.yaml', 'capacitor.config.json', '.github/workflows/build-apk.yml', 'src/App.tsx', 'src/android/prepare-android.mjs', 'public/assets/kayan-eagle.png']) {
+      const requiredFiles = [
+        'package.json', 'pnpm-lock.yaml', 'capacitor.config.json',
+        '.github/workflows/build-apk.yml', 'src/App.tsx',
+        'src/android/prepare-android.mjs', 'public/assets/kayan-eagle.png',
+        ...(driver ? [
+          'SUPABASE_DRIVER_DATA.md',
+          'supabase/migrations/20261006060000_driver_subscriptions_commission.sql',
+          'supabase/functions/verify-driver-subscription/index.ts',
+          'supabase/functions/google-play-rtdn/index.ts',
+          'supabase/functions/driver-subscription-admin/index.ts',
+        ] : [
+          'supabase/config.toml',
+          'supabase/migrations/20261005214000_live_ride_dispatch.sql',
+          'supabase/migrations/20261006050000_driver_passenger_ride_stages.sql',
+          'supabase/migrations/20261006135000_mtn_momo_collection.sql',
+          'supabase/functions/create-ride-request/index.ts',
+          'supabase/functions/mtn-momo-payment/index.ts',
+        ]),
+      ];
+      for (const required of requiredFiles) {
         if (!files.some(file => file.name === `kayan-${variant}/${required}`)) throw new Error('Missing export file ' + required);
       }
+      if (files.some(file => file.name.includes('/supabase/.temp/'))) throw new Error('Local Supabase temporary files cannot be included in project exports.');
       const buffer = zip(files);
       const filename = `kayan-${variant}-github-project.zip`;
       await fs.writeFile(path.join(outputDirectory, filename), buffer);

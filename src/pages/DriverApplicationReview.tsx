@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ArrowLeft, CheckCircle2, ExternalLink, FileText, LogOut, RefreshCw, ShieldCheck, XCircle } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, ExternalLink, FileText, Fuel, LogOut, RefreshCw, ShieldCheck, XCircle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
@@ -127,6 +127,7 @@ export default function DriverApplicationReview() {
         <p className="mt-2 text-sm text-muted-foreground">Review the submitted profile, vehicle, and private documents before approving a driver.</p>
       </div>
       <div className="flex gap-2">
+        {authorized && <Button type="button" variant="outline" asChild><Link to="/admin/driver-premium-rewards"><Fuel size={15}/>Fuel rewards</Link></Button>}
         <Button type="button" variant="outline" onClick={() => void loadApplications()} disabled={loading}>
           <RefreshCw size={15} className={loading ? 'animate-spin' : ''}/>Refresh
         </Button>

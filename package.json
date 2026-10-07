@@ -5,6 +5,7 @@
     "@capacitor/geolocation": "^7.1.0",
     "@capacitor/google-maps": "^7.2.2",
     "@capacitor/push-notifications": "^7.0.7",
+    "@capgo/native-purchases": "7.19.3",
     "@hookform/resolvers": "^3.9.0",
     "@radix-ui/react-accordion": "^1.2.0",
     "@radix-ui/react-alert-dialog": "^1.1.1",
